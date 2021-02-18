@@ -1,7 +1,7 @@
-#/******************************************************************************
-#* Copyright (c) 2021 Xilinx, Inc.  All rights reserved.
-#* SPDX-License-Identifier: MIT
-#******************************************************************************/
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (c) 2021 Xilinx, Inc.  All rights reserved.
+#
 
 
 CROSS_COMP := aarch64-linux-gnu
