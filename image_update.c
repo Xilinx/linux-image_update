@@ -27,44 +27,44 @@
 #define XBIU_IDEN_STR_LEN		(0x4U)
 
 /* The below enums denote persistent registers in Qspi Flash */
-struct SysPersistentState {
-	char LastBootedImg;
-	char RequestedBootImg;
-	char ImgBBootable;
-	char ImgABootable;
+struct sys_persistent_state {
+	char last_booted_img;
+	char requested_boot_img;
+	char img_b_bootable;
+	char img_a_bootable;
 };
 
-struct SysBootImgInfo {
-	char IdStr[4U];
-	unsigned int Ver;
-	unsigned int Len;
-	unsigned int Checksum;
-	SysPersistentState PersistentState;
-	unsigned int BootImgAOffset;
-	unsigned int BootImgBOffset;
-	unsigned int RecoveryImgOffset;
-};
+struct sys_boot_img_info {
+	char idstr[4U];
+	unsigned int ver;
+	unsigned int len;
+	unsigned int checksum;
+	struct sys_persistent_state persistent_state;
+	unsigned int boot_img_a_offset;
+	unsigned int boot_img_b_offset;
+	unsigned int recovery_img_offset;
+} __packed;
 
-enum SysBootImgId {
+enum sys_boot_img_id {
 	SYS_BOOT_IMG_A_ID = 0,
 	SYS_BOOT_IMG_B_ID
 };
 
 /* Function Declarations */
-unsigned int CalculateCheckSum(void);
-int UpdateImage(char * QspiMtdFile);
-int ReadImageFile(char * InputFile);
-int ValidateBoardString(void);
-int UpdatePersistentRegisters(char* QspiMtdPersRegFile);
-void CalculateImageCheckSum(char * SrcAddr, unsigned int Len,
-	unsigned int* CalcCrc);
-int VerifyCurrentRunningImage(char * QspiMtdFile);
-int ValidateBootImgInfo(void);
+unsigned int calculate_checksum(void);
+int update_image(char *qspi_mtd_file);
+int read_image_file(char *input_file);
+int validate_board_string(void);
+int update_persistent_registers(char *qspi_mtd_pers_reg_file);
+void calculate_image_checksum(char *srcaddr, unsigned int len,
+				     unsigned int *calc_crc);
+int verify_current_running_image(char *qspi_mtd_file);
+int validate_boot_img_info(void);
 
 /* Variable definitions */
-char * SrcAddr = NULL;
-unsigned int ImageSize = 0U;
-struct SysBootImgInfo BootImgInfo = {0U};
+char *srcaddr = NULL;
+unsigned int image_size;
+struct sys_boot_img_info boot_img_info __attribute__ ((aligned(4U)));
 
 static const unsigned int CrcTable[] = {
 	0x00000000U, 0x77073096U, 0xEE0E612CU, 0x990951BAU, 0x076DC419U, 0x706AF48FU, 0xE963A535U, 0x9E6495A3U,
@@ -101,7 +101,6 @@ static const unsigned int CrcTable[] = {
 	0xB3667A2EU, 0xC4614AB8U, 0x5D681B02U, 0x2A6F2B94U, 0xB40BBE37U, 0xC30C8EA1U, 0x5A05DF1BU, 0x2D02EF8DU,
 };
 
-
 /* Function definitions */
 
 /*****************************************************************************/
@@ -120,10 +119,10 @@ static const unsigned int CrcTable[] = {
  * @return	XST_SUCCESS on success and error code on failure
  *
  *****************************************************************************/
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-	int Ret = XST_FAILURE;
-	char QspiMtdFile[20U] = {0U};	
+	int ret = XST_FAILURE;
+	char qspi_mtd_file[20U] = {0U};
 
 	if (argc != 2U) {
 		printf("Invalid parameters passed\n");
@@ -142,16 +141,15 @@ int main(int argc, char* argv[])
 	/* Validate board string to ensure the app does not run on
 	 * unsupported boards
 	 */
-	Ret = ValidateBoardString();
-	if (Ret != XST_SUCCESS) {
+	ret = validate_board_string();
+	if (ret != XST_SUCCESS)
 		goto END;
-	}
 
-	Ret = VerifyCurrentRunningImage("/dev/mtd2");
-	if (Ret != XST_SUCCESS) {
+	ret = verify_current_running_image("/dev/mtd2");
+	if (ret != XST_SUCCESS) {
 		printf("Reading persistent registers backup\n");
-		Ret = VerifyCurrentRunningImage("/dev/mtd3");
-		if (Ret != XST_SUCCESS) {
+		ret = verify_current_running_image("/dev/mtd3");
+		if (ret != XST_SUCCESS) {
 			printf("Unable to retrieve persistent registers\n");
 			goto END;
 		}
@@ -160,23 +158,23 @@ int main(int argc, char* argv[])
 	/* Input image would be written to a Qspi partition that does not
 	 * contain the current running image
 	 */
-	if (BootImgInfo.PersistentState.LastBootedImg ==
+	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
-		strcpy(QspiMtdFile, "/dev/mtd7");
-	}
-	else {
-		strcpy(QspiMtdFile, "/dev/mtd5");
+		boot_img_info.persistent_state.img_b_bootable = 0U;
+		strcpy(qspi_mtd_file, "/dev/mtd7");
+	} else {
+		boot_img_info.persistent_state.img_a_bootable = 0U;
+		strcpy(qspi_mtd_file, "/dev/mtd5");
 	}
 
 	printf("Marking target image non bootable\n");
-	Ret = UpdatePersistentRegisters("/dev/mtd2");
-	if (Ret < 0) {
+	ret = update_persistent_registers("/dev/mtd2");
+	if (ret < 0)
 		goto END;
-	}
-	Ret = UpdatePersistentRegisters("/dev/mtd3");
-	if (Ret < 0) {
+
+	ret = update_persistent_registers("/dev/mtd3");
+	if (ret < 0)
 		goto END;
-	}
 
 	printf("Reading Image..\n");
 	Ret = ReadImageFile(argv[1U]);
@@ -185,180 +183,171 @@ int main(int argc, char* argv[])
 	}
 
 	printf("Writing Image..\n");
-	Ret = UpdateImage(QspiMtdFile);
-	if (Ret != XST_SUCCESS) {
+	ret = update_image(qspi_mtd_file);
+	if (ret != XST_SUCCESS)
 		goto END;
-	}
 
-	printf("Marking target image as requested image\n");
-	if (BootImgInfo.PersistentState.LastBootedImg ==
+	printf("Marking target image as non bootable and requested image\n");
+	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
-		BootImgInfo.PersistentState.RequestedBootImg =
+		boot_img_info.persistent_state.requested_boot_img =
 			(char)SYS_BOOT_IMG_B_ID;
-	}
-	else {
-		BootImgInfo.PersistentState.RequestedBootImg =
+	} else {
+		boot_img_info.persistent_state.requested_boot_img =
 			(char)SYS_BOOT_IMG_A_ID;
 	}
 	/* Update persistent register partition */
-	Ret = UpdatePersistentRegisters("/dev/mtd2");
-	if (Ret < 0) {
+	ret = update_persistent_registers("/dev/mtd2");
+	if (ret < 0)
 		goto END;
-	}
+
 	/* Update persistent register backup partition */
-	Ret = UpdatePersistentRegisters("/dev/mtd3");
-	if (Ret < 0) {
+	ret = update_persistent_registers("/dev/mtd3");
+	if (ret < 0)
 		goto END;
-	}
+
 	printf("%s updated successfully\n", argv[1U]);
 
 END:
-	if (SrcAddr != NULL) {
-		free(SrcAddr);
-	}
-	return Ret;
+	if (srcaddr)
+		free(srcaddr);
+	return ret;
 }
 
 /*****************************************************************************/
 /**
  * @brief
- * This function calculates the checksum of BootImgInfo which reflects the
+ * This function calculates the checksum of boot_img_info which reflects the
  * persistent registers in Qspi.
  *
- * @return	Checksum of BootImgInfo variable
+ * @return	Checksum of boot_img_info variable
  *
  *****************************************************************************/
-unsigned int CalculateCheckSum(void)
+unsigned int calculate_checksum(void)
 {
-	unsigned int Idx;
-	unsigned int Checksum = 0U;
-	unsigned int *Data = (unsigned int *)&BootImgInfo;
-	unsigned int BootImgInfoSize = sizeof(BootImgInfo) / 4U;
+	unsigned int idx;
+	unsigned int checksum = 0U;
+	unsigned int *data = (unsigned int *)&boot_img_info;
+	unsigned int boot_img_info_size = sizeof(boot_img_info) / 4U;
 
-	for (Idx = 0U; Idx < SYS_CHECKSUM_OFFSET; Idx++) {
-		Checksum += Data[Idx];
-	}
-	for (Idx = SYS_CHECKSUM_OFFSET + 1U; Idx < BootImgInfoSize; Idx++) {
-		Checksum += Data[Idx];
-	}
-	return (0xFFFFFFFFU - Checksum);
+	for (idx = 0U; idx < SYS_CHECKSUM_OFFSET; idx++)
+		checksum += data[idx];
+
+	for (idx = SYS_CHECKSUM_OFFSET + 1U; idx < boot_img_info_size; idx++)
+		checksum += data[idx];
+
+	return (0xFFFFFFFFU - checksum);
 }
 
 /*****************************************************************************/
 /**
  * @brief
- * This function writes BootImgInfo variable to persistent registers indicated
- * by QspiMtdFile.
+ * This function writes boot_img_info variable to persistent registers
+ * indicated by qspi_mtd_file.
  *
- * @param	QspiMtdFile denotes the mtd partition to be updated
- * 
+ * @param	qspi_mtd_file denotes the mtd partition to be updated
+ *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int UpdatePersistentRegisters(char* QspiMtdPersRegFile)
+int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 {
-	int Ret = XST_FAILURE, fdPersReg;
+	int ret = XST_FAILURE, fd_pers_reg;
 	erase_info_t ei = {0U};
-	mtd_info_t QspiMtdInfo;
+	mtd_info_t qspi_mtd_info;
 
-	fdPersReg = open(QspiMtdPersRegFile, O_WRONLY);
-	if (fdPersReg < 0) {
+	fd_pers_reg = open(qspi_mtd_pers_reg_file, O_WRONLY);
+	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
 		goto END;
 	}
 
-	Ret = ioctl(fdPersReg, MEMGETINFO, &QspiMtdInfo);
-	if (Ret != XST_SUCCESS) {
-		printf("Retrieving MTD paartition info failed\n");
+	ret = ioctl(fd_pers_reg, MEMGETINFO, &qspi_mtd_info);
+	if (ret != XST_SUCCESS) {
+		printf("retrieving MTD paartition info failed\n");
 		goto END1;
 	}
 
 	/* Update persistent registers in Qspi */
 	ei.start = 0;
-	ei.length = QspiMtdInfo.size;
-
-	Ret = ioctl(fdPersReg, MEMERASE, &ei);
-	if (Ret < 0) {
+	ei.length = qspi_mtd_info.size;
+	ret = ioctl(fd_pers_reg, MEMERASE, &ei);
+	if (ret < 0) {
 		printf("Erase Qspi MTD partition failed\n");
 		goto END1;
 	}
 
-	Ret = lseek(fdPersReg, 0, SEEK_SET);
-	if (Ret != 0) {
+	ret = lseek(fd_pers_reg, 0, SEEK_SET);
+	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
 		goto END1;
 	}
 
-	BootImgInfo.Checksum = CalculateCheckSum();
-	Ret = write(fdPersReg, (char*)&BootImgInfo, sizeof(BootImgInfo));
-	if (Ret != sizeof(SysBootImgInfo)) {
+	boot_img_info.checksum = calculate_checksum();
+	ret = write(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
+	if (ret != sizeof(boot_img_info)) {
 		printf("Write Qspi MTD partition failed\n");
-		Ret = XST_FAILURE;
+		ret = XST_FAILURE;
 		goto END1;
 	}
-	Ret = XST_SUCCESS;
+	ret = XST_SUCCESS;
 
 END1:
-	close(fdPersReg);
+	close(fd_pers_reg);
 END:
-	return Ret;
+	return ret;
 }
 
 /*****************************************************************************/
 /**
  * @brief
- * This function reads the persistent registers indicated by QspiMtdFile
+ * This function reads the persistent registers indicated by qspi_mtd_file
  * to marked the recently updated image as bootable and target image as
  * non bootable.
  *
- * @param	QspiMtdFile denotes the mtd partition to be updated
+ * @param	qspi_mtd_file denotes the mtd partition to be updated
  *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int VerifyCurrentRunningImage(char * QspiMtdFile)
+int verify_current_running_image(char *qspi_mtd_file)
 {
-	int Ret = XST_FAILURE, fdPersReg;
+	int ret = XST_FAILURE, fd_pers_reg;
 
-	fdPersReg = open(QspiMtdFile, O_RDONLY);
-	if (fdPersReg < 0) {
+	fd_pers_reg = open(qspi_mtd_file, O_RDONLY);
+	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
 		goto END;
 	}
 
-	Ret = read(fdPersReg, (char *)&BootImgInfo, sizeof(BootImgInfo));
-	if (Ret != sizeof(BootImgInfo)) {
+	ret = read(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
+	if (ret != sizeof(boot_img_info)) {
 		printf("Read Qspi MTD partition failed\n");
-		Ret = XST_FAILURE;
-		goto END1;	
+		ret = XST_FAILURE;
+		goto END1;
 	}
 
-	Ret = ValidateBootImgInfo();
-	if (Ret != XST_SUCCESS) {
+	ret = validate_boot_img_info();
+	if (ret != XST_SUCCESS) {
 		printf("Persistent registers are corrupted\n");
 		goto END;
 	}
 
-	if (BootImgInfo.PersistentState.RequestedBootImg ==
+	if (boot_img_info.persistent_state.requested_boot_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
-		if (BootImgInfo.PersistentState.ImgABootable == 0U) {
-			BootImgInfo.PersistentState.ImgABootable = 1U;
-		}
-		BootImgInfo.PersistentState.ImgBBootable = 0U;
-	}
-	else {
-		if (BootImgInfo.PersistentState.ImgBBootable == 0U) {
-			BootImgInfo.PersistentState.ImgBBootable = 1U;
-		}
-		BootImgInfo.PersistentState.ImgABootable = 0U;
+		if (boot_img_info.persistent_state.img_a_bootable == 0U)
+			boot_img_info.persistent_state.img_a_bootable = 1U;
+	} else {
+		if (boot_img_info.persistent_state.img_b_bootable == 0U)
+			boot_img_info.persistent_state.img_b_bootable = 1U;
 	}
 
-	Ret = XST_SUCCESS;
+	ret = XST_SUCCESS;
 
 END1:
-	close(fdPersReg);
+	close(fd_pers_reg);
 END:
-	return Ret;
+	return ret;
 }
 
 /*****************************************************************************/
@@ -367,60 +356,58 @@ END:
  * This function copies the contents of input image file to local memory.
  * It validates the image by checking for "XLNX" identification string.
  *
- * @param	InputFile is the input image file
+ * @param	input_file is the input image file
  *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int ReadImageFile(char * InputFile)
+int read_image_file(char *input_file)
 {
-	int Ret = XST_FAILURE, fp;
-	struct stat ImageDetails;
-	const char  *IdenStr = "XNLX";
-	char *IdenStrPtr = NULL;
+	int ret = XST_FAILURE, fp;
+	struct stat image_details;
+	const char  *iden_str = "XNLX";
+	char *iden_str_ptr = NULL;
 
 	/* Open Image file and read contents */
-	fp = open(InputFile, O_RDONLY);
+	fp = open(input_file, O_RDONLY);
 	if (fp < 0) {
 		printf("Input image file open failed\n");
 		goto END;
 	}
 
-	Ret = fstat(fp, &ImageDetails);
-	if (Ret != XST_SUCCESS) {
+	ret = fstat(fp, &image_details);
+	if (ret != XST_SUCCESS) {
 		printf("Input image file stat read failed\n");
 		goto END1;
 	}
 
-	ImageSize = ImageDetails.st_size;
-	SrcAddr = (char*)calloc(ImageSize, 1);
-	if (SrcAddr == NULL) {
-		printf("Allocation of temporary memory for input image "
-			"failed\n");
-		Ret = XST_FAILURE;
+	image_size = image_details.st_size;
+	srcaddr = (char *)calloc(image_size, 1);
+	if (!srcaddr) {
+		printf("Allocation of memory for input image failed\n");
+		ret = XST_FAILURE;
 		goto END1;
 	}
-	Ret = read(fp, SrcAddr, ImageSize);
-	if (Ret != ImageSize) {
+	ret = read(fp, srcaddr, image_size);
+	if (ret != image_size) {
 		printf("Input image file read failed\n");
-		Ret = XST_FAILURE;
+		ret = XST_FAILURE;
 		goto END1;
 	}
 
 	/* Validate Identification String of Image */
-	IdenStrPtr = &SrcAddr[XBIU_IDEN_STR_OFFSET];
-	if (strncmp(IdenStrPtr, IdenStr, XBIU_IDEN_STR_LEN) != 0) {
-		printf("Identification String Validation Failed: "
-			"Invalid Image\n");
-		Ret = XST_FAILURE;
+	iden_str_ptr = &srcaddr[XBIU_IDEN_STR_OFFSET];
+	if (strncmp(iden_str_ptr, iden_str, XBIU_IDEN_STR_LEN) != 0) {
+		printf("Identification String Validation of image Failed!!\n");
+		ret = XST_FAILURE;
 		goto END1;
 	}
-	Ret = XST_SUCCESS;
+	ret = XST_SUCCESS;
 
 END1:
 	close(fp);
 END:
-	return Ret;
+	return ret;
 }
 
 /*****************************************************************************/
@@ -431,96 +418,96 @@ END:
  * compares checksums of input image file and data written in Qspi to validates
  * image write operation.
  *
- * @param	QspiMtdFile denotes the mtd partition to be updated
+ * @param	qspi_mtd_file denotes the mtd partition to be updated
  *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int UpdateImage(char* QspiMtdFile)
+int update_image(char *qspi_mtd_file)
 {
-	int Ret = XST_FAILURE, fd;
+	int ret = XST_FAILURE, fd;
 	erase_info_t ei = {0U};
-	mtd_info_t QspiMtdInfo;
-	unsigned int InputImageChecksum = 0xFFFFFFFFU;
-	unsigned int QspiImageChecksum = 0xFFFFFFFFU;
-	char ReadBuffer[1024U];
-	unsigned int Idx, Len;
+	mtd_info_t qspi_mtd_info;
+	unsigned int input_image_checksum = 0xFFFFFFFFU;
+	unsigned int qspi_image_checksum = 0xFFFFFFFFU;
+	char read_buffer[1024U];
+	unsigned int idx, len;
 
 	/* Qspi operations */
-	fd = open(QspiMtdFile, O_RDWR);
+	fd = open(qspi_mtd_file, O_RDWR);
 	if (fd < 0) {
 		printf("Open Qspi MTD partition failed\n");
 		goto END;
 	}
 
-	Ret = ioctl(fd, MEMGETINFO, &QspiMtdInfo);
-	if (Ret != XST_SUCCESS) {
-		printf("Retrieving MTD paartition info failed\n");
+	ret = ioctl(fd, MEMGETINFO, &qspi_mtd_info);
+	if (ret != XST_SUCCESS) {
+		printf("retrieving MTD paartition info failed\n");
 		goto END1;
 	}
 
 	/* Validate Image Size */
-	if (ImageSize > QspiMtdInfo.size) {
+	if (image_size > qspi_mtd_info.size) {
 		printf("Image file too big to update. Update aborted\n");
-		Ret = XST_FAILURE;
+		ret = XST_FAILURE;
 		goto END;
 	}
 
 	ei.start = 0;
-	ei.length = QspiMtdInfo.size;
-	Ret = ioctl(fd, MEMERASE, &ei);
-	if (Ret < 0) {
+	ei.length = qspi_mtd_info.size;
+	ret = ioctl(fd, MEMERASE, &ei);
+	if (ret < 0) {
 		printf("Erase Qspi MTD partition failed\n");
 		goto END1;
 	}
 
-	Ret = lseek(fd, 0, SEEK_SET);
-	if (Ret != 0) {
+	ret = lseek(fd, 0, SEEK_SET);
+	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
 		goto END1;
 	}
 
-	Ret = write(fd, (char*)SrcAddr, ImageSize);
-	if (Ret != ImageSize) {
+	ret = write(fd, (char *)srcaddr, image_size);
+	if (ret != image_size) {
 		printf("Write to Qspi MTD partition failed\n");
-		Ret = XST_FAILURE;
+		ret = XST_FAILURE;
 		goto END1;
 	}
 
-	Ret = lseek(fd, 0, SEEK_SET);
-	if (Ret != 0) {
+	ret = lseek(fd, 0, SEEK_SET);
+	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
 		goto END1;
 	}
 
-	/* Calculate and Validate Checksum */
-	CalculateImageCheckSum(SrcAddr, ImageSize, &InputImageChecksum);
-	while (ImageSize > 0U) {
-		if (ImageSize > 1024U) {
-			Len = 1024U;
-		}
-		else {
-			Len = ImageSize;
-		}
-		Ret = read(fd, ReadBuffer, Len);
-		if (Ret != Len) {
+	/* Calculate and Validate checksum */
+	calculate_image_checksum(srcaddr, image_size, &input_image_checksum);
+	while (image_size > 0U) {
+		if (image_size > 1024U)
+			len = 1024U;
+		else
+			len = image_size;
+
+		ret = read(fd, read_buffer, len);
+		if (ret != len) {
 			printf("Qspi checksum calculation failed\n");
-			Ret = XST_FAILURE;
+			ret = XST_FAILURE;
 			goto END1;
 		}
-		CalculateImageCheckSum(ReadBuffer, Len, &QspiImageChecksum);
-		ImageSize -= Len;
+		calculate_image_checksum(read_buffer, len,
+					 &qspi_image_checksum);
+		image_size -= len;
 	}
-	if (InputImageChecksum != QspiImageChecksum) {
-		printf("Checksum mismatch!! Image update failed.\n");
+	if (input_image_checksum != qspi_image_checksum) {
+		printf("checksum mismatch!! Image update failed.\n");
 		goto END1;
 	}
-	Ret = XST_SUCCESS;
-	
+	ret = XST_SUCCESS;
+
 END1:
 	close(fd);
 END:
-	return Ret;
+	return ret;
 }
 
 /*****************************************************************************/
@@ -532,54 +519,53 @@ END:
  * @return	XST_SUCCESS if board revision is supported, else XST_FAILURE
  *
  *****************************************************************************/
-int ValidateBoardString(void)
+int validate_board_string(void)
 {
-	int Ret = XST_FAILURE;
-	FILE * Cmd;
-	char Revision[10U] = {0U};
+	int ret = XST_FAILURE;
+	FILE *cmd;
+	char revision[10U] = {0U};
 
-	Cmd = popen("fru-print.py -b som -f revision", "r");
-	if (Cmd == NULL) {
-		printf("Unable to read Board Revision from Eeprom\n");
+	cmd = popen("fru-print.py -b som -f revision", "r");
+	if (!cmd) {
+		printf("Unable to read Board revision from EEprom\n");
 		goto END;
 	}
-	fscanf(Cmd, "%s", Revision);
-	if ((strcmp(Revision, "A") == 0) || (strcmp(Revision, "B") == 0) ||
-		(strcmp(Revision, "Y") == 0) || (strcmp(Revision, "Z") == 0) ||
-		(strcmp(Revision, "1.0") == 0)) {
-		Ret = XST_SUCCESS;
+	fscanf(cmd, "%9s", revision);
+	if ((strcmp(revision, "A") == 0) || (strcmp(revision, "B") == 0) ||
+	    (strcmp(revision, "Y") == 0) || (strcmp(revision, "Z") == 0) ||
+		(strcmp(revision, "1.0") == 0)) {
+		ret = XST_SUCCESS;
+	} else {
+		printf("Unable to read Board revision from EEprom via ");
+		printf("fru-print.py utility\n");
 	}
-	else {
-		printf("Unsupported board revision, image update aborting!!\n");
-		Ret = XST_SUCCESS;
-	}
-	pclose(Cmd);
+	pclose(cmd);
 
 END:
-	return Ret;
+	return ret;
 }
 
 /*****************************************************************************/
 /**
  * @brief
- * This function calculates checksum of Len bytes of data starting from SrcAddr
- * and stores it in CalcCrc.
+ * This function calculates checksum of len bytes of data starting from srcaddr
+ * and stores it in calc_crc.
  *
- * @param	SrcAddr points to the start of data
- * @param	Len denotes number of bytes of data
- * @param	CalcCrc is a place holder for the calculated checksum
+ * @param	srcaddr points to the start of data
+ * @param	len denotes number of bytes of data
+ * @param	calc_crc is a place holder for the calculated checksum
  *
  * @return	None
  *
  *****************************************************************************/
-void CalculateImageCheckSum(char * SrcAddr, unsigned int Len,
-	unsigned int* CalcCrc)
+void calculate_image_checksum(char *srcaddr, unsigned int len,
+				     unsigned int *calc_crc)
 {
-	unsigned int Idx;
+	unsigned int idx;
 
-	for (Idx = 0U; Idx < Len; Idx++) {
-		*CalcCrc = ((*CalcCrc) >> 8U) ^
-			CrcTable[((*CalcCrc) ^ SrcAddr[Idx]) & 0xFFU];
+	for (idx = 0U; idx < len; idx++) {
+		*calc_crc = ((*calc_crc) >> 8U) ^
+			crc_table[((*calc_crc) ^ srcaddr[idx]) & 0xFFU];
 	}
 }
 
@@ -587,26 +573,25 @@ void CalculateImageCheckSum(char * SrcAddr, unsigned int Len,
 /**
  * @brief
  * This function checks for identification string and validates checksum of
- * BootImgInfo, which at the point of calling this function is populated with
+ * boot_img_info, which at the point of calling this function is populated with
  * values of persistent registers.
  *
  * @return	XST_SUCCESS on success and error code on failure
  *
  *****************************************************************************/
-int ValidateBootImgInfo(void)
+int validate_boot_img_info(void)
 {
-	int Ret = XST_FAILURE;
-	unsigned int Checksum = BootImgInfo.Checksum;
+	int ret = XST_FAILURE;
+	unsigned int checksum = boot_img_info.checksum;
 
-	if ((BootImgInfo.IdStr[0U] == 'A') &&
-		(BootImgInfo.IdStr[1U] == 'B') &&
-		(BootImgInfo.IdStr[2U] == 'U') &&
-		(BootImgInfo.IdStr[3U] == 'M')) {
-		BootImgInfo.Checksum = CalculateCheckSum();
-		if (Checksum == BootImgInfo.Checksum) {
-			Ret = XST_SUCCESS;
-		}
+	if ((boot_img_info.idstr[0U] == 'A') &&
+	    (boot_img_info.idstr[1U] == 'B') &&
+		(boot_img_info.idstr[2U] == 'U') &&
+		(boot_img_info.idstr[3U] == 'M')) {
+		boot_img_info.checksum = calculate_checksum();
+		if (checksum == boot_img_info.checksum)
+			ret = XST_SUCCESS;
 	}
 
-	return Ret;
+	return ret;
 }
