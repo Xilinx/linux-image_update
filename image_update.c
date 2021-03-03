@@ -51,20 +51,20 @@ enum sys_boot_img_id {
 };
 
 /* Function Declarations */
-unsigned int calculate_checksum(void);
-int update_image(char *qspi_mtd_file);
-int read_image_file(char *input_file);
-int validate_board_string(void);
-int update_persistent_registers(char *qspi_mtd_pers_reg_file);
-void calculate_image_checksum(char *srcaddr, unsigned int len,
+static unsigned int calculate_checksum(void);
+static int update_image(char *qspi_mtd_file);
+static int read_image_file(char *input_file);
+static int validate_board_string(void);
+static int update_persistent_registers(char *qspi_mtd_pers_reg_file);
+static void calculate_image_checksum(char *srcaddr, unsigned int len,
 				     unsigned int *calc_crc);
-int verify_current_running_image(char *qspi_mtd_file);
-int validate_boot_img_info(void);
+static int verify_current_running_image(char *qspi_mtd_file);
+static int validate_boot_img_info(void);
 
 /* Variable definitions */
-char *srcaddr = NULL;
-unsigned int image_size;
-struct sys_boot_img_info boot_img_info __attribute__ ((aligned(4U)));
+static char *srcaddr = NULL;
+static unsigned int image_size;
+static struct sys_boot_img_info boot_img_info __attribute__ ((aligned(4U)));
 
 static const unsigned int CrcTable[] = {
 	0x00000000U, 0x77073096U, 0xEE0E612CU, 0x990951BAU, 0x076DC419U, 0x706AF48FU, 0xE963A535U, 0x9E6495A3U,
@@ -127,16 +127,14 @@ int main(int argc, char *argv[])
 	if (argc != 2U) {
 		printf("Invalid parameters passed\n");
 		printf("Usage: image_update <path of image file>\n");
-		goto END;
+		return ret;
 	}
-	else {
-		if ((strcmp(argv[1U], "-h") == 0U) ||
-			(strcmp(argv[1U], "--help") == 0U)) {
-			printf("Usage: image_update <path of image file>\n");
-			Ret = XST_SUCCESS;
-			goto END;
-		}
-	}	
+	if ((strcmp(argv[1U], "-h") == 0U) ||
+	    (strcmp(argv[1U], "--help") == 0U)) {
+		printf("Usage: image_update <path of image file>\n");
+		ret = XST_SUCCESS;
+		return ret;
+	}
 
 	/* Validate board string to ensure the app does not run on
 	 * unsupported boards
@@ -223,7 +221,7 @@ END:
  * @return	Checksum of boot_img_info variable
  *
  *****************************************************************************/
-unsigned int calculate_checksum(void)
+static unsigned int calculate_checksum(void)
 {
 	unsigned int idx;
 	unsigned int checksum = 0U;
@@ -250,7 +248,7 @@ unsigned int calculate_checksum(void)
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int update_persistent_registers(char *qspi_mtd_pers_reg_file)
+static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 {
 	int ret = XST_FAILURE, fd_pers_reg;
 	erase_info_t ei = {0U};
@@ -310,7 +308,7 @@ END:
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int verify_current_running_image(char *qspi_mtd_file)
+static int verify_current_running_image(char *qspi_mtd_file)
 {
 	int ret = XST_FAILURE, fd_pers_reg;
 
@@ -361,7 +359,7 @@ END:
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int read_image_file(char *input_file)
+static int read_image_file(char *input_file)
 {
 	int ret = XST_FAILURE, fp;
 	struct stat image_details;
@@ -423,7 +421,7 @@ END:
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-int update_image(char *qspi_mtd_file)
+static int update_image(char *qspi_mtd_file)
 {
 	int ret = XST_FAILURE, fd;
 	erase_info_t ei = {0U};
@@ -519,7 +517,7 @@ END:
  * @return	XST_SUCCESS if board revision is supported, else XST_FAILURE
  *
  *****************************************************************************/
-int validate_board_string(void)
+static int validate_board_string(void)
 {
 	int ret = XST_FAILURE;
 	FILE *cmd;
@@ -558,7 +556,7 @@ END:
  * @return	None
  *
  *****************************************************************************/
-void calculate_image_checksum(char *srcaddr, unsigned int len,
+static void calculate_image_checksum(char *srcaddr, unsigned int len,
 				     unsigned int *calc_crc)
 {
 	unsigned int idx;
@@ -579,7 +577,7 @@ void calculate_image_checksum(char *srcaddr, unsigned int len,
  * @return	XST_SUCCESS on success and error code on failure
  *
  *****************************************************************************/
-int validate_boot_img_info(void)
+static int validate_boot_img_info(void)
 {
 	int ret = XST_FAILURE;
 	unsigned int checksum = boot_img_info.checksum;
