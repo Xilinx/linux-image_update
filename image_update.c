@@ -27,14 +27,14 @@
 #define XBIU_IDEN_STR_LEN		(0x4U)
 
 /* The below enums denote persistent registers in Qspi Flash */
-typedef struct {
+struct SysPersistentState {
 	char LastBootedImg;
 	char RequestedBootImg;
 	char ImgBBootable;
 	char ImgABootable;
-} SysPersistentState;
+};
 
-typedef struct {
+struct SysBootImgInfo {
 	char IdStr[4U];
 	unsigned int Ver;
 	unsigned int Len;
@@ -43,12 +43,12 @@ typedef struct {
 	unsigned int BootImgAOffset;
 	unsigned int BootImgBOffset;
 	unsigned int RecoveryImgOffset;
-} SysBootImgInfo;
+};
 
-typedef enum {
+enum SysBootImgId {
 	SYS_BOOT_IMG_A_ID = 0,
 	SYS_BOOT_IMG_B_ID
-} SysBootImgId;
+};
 
 /* Function Declarations */
 unsigned int CalculateCheckSum(void);
@@ -64,7 +64,7 @@ int ValidateBootImgInfo(void);
 /* Variable definitions */
 char * SrcAddr = NULL;
 unsigned int ImageSize = 0U;
-SysBootImgInfo BootImgInfo = {0U};
+struct SysBootImgInfo BootImgInfo = {0U};
 
 static const unsigned int CrcTable[] = {
 	0x00000000U, 0x77073096U, 0xEE0E612CU, 0x990951BAU, 0x076DC419U, 0x706AF48FU, 0xE963A535U, 0x9E6495A3U,
@@ -233,7 +233,7 @@ unsigned int CalculateCheckSum(void)
 	unsigned int Idx;
 	unsigned int Checksum = 0U;
 	unsigned int *Data = (unsigned int *)&BootImgInfo;
-	unsigned int BootImgInfoSize = sizeof(SysBootImgInfo) / 4U;
+	unsigned int BootImgInfoSize = sizeof(BootImgInfo) / 4U;
 
 	for (Idx = 0U; Idx < SYS_CHECKSUM_OFFSET; Idx++) {
 		Checksum += Data[Idx];
@@ -290,7 +290,7 @@ int UpdatePersistentRegisters(char* QspiMtdPersRegFile)
 	}
 
 	BootImgInfo.Checksum = CalculateCheckSum();
-	Ret = write(fdPersReg, (char*)&BootImgInfo, sizeof(SysBootImgInfo));
+	Ret = write(fdPersReg, (char*)&BootImgInfo, sizeof(BootImgInfo));
 	if (Ret != sizeof(SysBootImgInfo)) {
 		printf("Write Qspi MTD partition failed\n");
 		Ret = XST_FAILURE;
@@ -326,8 +326,8 @@ int VerifyCurrentRunningImage(char * QspiMtdFile)
 		goto END;
 	}
 
-	Ret = read(fdPersReg, (char *)&BootImgInfo, sizeof(SysBootImgInfo));
-	if (Ret != sizeof(SysBootImgInfo)) {
+	Ret = read(fdPersReg, (char *)&BootImgInfo, sizeof(BootImgInfo));
+	if (Ret != sizeof(BootImgInfo)) {
 		printf("Read Qspi MTD partition failed\n");
 		Ret = XST_FAILURE;
 		goto END1;	
