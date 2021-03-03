@@ -185,6 +185,20 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	printf("Marking current image bootable\n");
+	ret = update_persistent_registers("/dev/mtd2");
+	if (ret < 0)
+		goto END;
+
+	ret = update_persistent_registers("/dev/mtd3");
+	if (ret < 0)
+		goto END;
+
+	printf("Reading Image..\n");
+	ret = read_image_file(argv[1U]);
+	if (ret != XST_SUCCESS)
+		goto END;
+
 	/* Input image would be written to a Qspi partition that does not
 	 * contain the current running image
 	 */
@@ -205,12 +219,6 @@ int main(int argc, char *argv[])
 	ret = update_persistent_registers("/dev/mtd3");
 	if (ret < 0)
 		goto END;
-
-	printf("Reading Image..\n");
-	Ret = ReadImageFile(argv[1U]);
-	if (Ret != XST_SUCCESS) {
-		goto END;
-	}
 
 	printf("Writing Image..\n");
 	ret = update_image(qspi_mtd_file);
