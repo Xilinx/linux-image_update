@@ -3,6 +3,7 @@
 # Copyright (c) 2021 Xilinx, Inc.
 #
 
+CROSS_COMPILE ?= aarch64-linux-gnu-
 CC := $(CROSS_COMPILE)gcc
 EXEC := image_update
 c_SOURCES := $(wildcard *.c)
