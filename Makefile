@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: MIT
 #
-# Copyright (c) 2021 Xilinx, Inc.  All rights reserved.
+# Copyright (c) 2021 Xilinx, Inc.
 #
 
 CC := $(CROSS_COMPILE)gcc
