@@ -4,7 +4,7 @@
 #
 
 CROSS_COMPILE ?= aarch64-linux-gnu-
-CC := $(CROSS_COMPILE)gcc
+CC ?= $(CROSS_COMPILE)gcc
 EXEC := image_update
 c_SOURCES := $(wildcard *.c)
 INCLUDES := $(wildcard *.h)
