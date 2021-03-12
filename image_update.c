@@ -60,6 +60,7 @@ static void calculate_image_checksum(char *srcaddr, unsigned int len,
 				     unsigned int *calc_crc);
 static int verify_current_running_image(char *qspi_mtd_file);
 static int validate_boot_img_info(void);
+static int print_persistent_state(char *qspi_mtd_file);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
@@ -164,6 +165,21 @@ int main(int argc, char *argv[])
 	if ((strcmp(argv[1U], "-h") == 0U) ||
 	    (strcmp(argv[1U], "--help") == 0U)) {
 		printf("Usage: image_update <path of image file>\n");
+		printf("image_update -p prints persistent state registers.\n");
+		printf("image_update --print prints persistent state ");
+		printf("registers\n");
+		printf("image_update -h prints this menu.\n");
+		printf("image_update --help prints this menu.\n");
+		ret = XST_SUCCESS;
+		return ret;
+	}
+	if ((strcmp(argv[1U], "-p") == 0U) ||
+	    (strcmp(argv[1U], "--print") == 0U)) {
+		ret = print_persistent_state("/dev/mtd2");
+		if (ret != XST_SUCCESS) {
+			printf("Reading persistent registers backup\n");
+			ret = print_persistent_state("/dev/mtd3");
+		}
 		ret = XST_SUCCESS;
 		return ret;
 	}
@@ -633,3 +649,69 @@ static int validate_boot_img_info(void)
 
 	return ret;
 }
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function reads the persistent registers and displays the state of
+ * images A and B in a readable format.
+ *
+ * @param	qspi_mtd_file denotes the mtd partition to be read
+ *
+ * @return	XST_SUCCESS on SUCCESS and error code on failure
+ *
+ *****************************************************************************/
+static int print_persistent_state(char *qspi_mtd_file)
+{
+	int fd_pers_reg, ret = XST_FAILURE;
+
+	fd_pers_reg = open(qspi_mtd_file, O_RDONLY);
+	if (fd_pers_reg < 0) {
+		printf("Open Qspi MTD partition failed\n");
+		return ret;
+	}
+
+	ret = read(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
+	if (ret != sizeof(boot_img_info)) {
+		printf("Read Qspi MTD partition failed\n");
+		ret = XST_FAILURE;
+		goto END;
+	}
+
+	ret = validate_boot_img_info();
+	if (ret != XST_SUCCESS) {
+		printf("Persistent registers are corrupted\n");
+		goto END;
+	}
+
+	printf("Image A: ");
+	if (boot_img_info.persistent_state.img_a_bootable == 0U)
+		printf("Non Bootable\n");
+	else
+		printf("Bootable\n");
+
+	printf("Image B: ");
+	if (boot_img_info.persistent_state.img_b_bootable == 0U)
+		printf("Non Bootable\n");
+	else
+		printf("Bootable\n");
+
+	printf("Requested Boot Image: ");
+	if (boot_img_info.persistent_state.requested_boot_img ==
+		(char)SYS_BOOT_IMG_A_ID)
+		printf("Image A\n");
+	else
+		printf("Image B\n");
+
+	printf("Last Booted Image: ");
+	if (boot_img_info.persistent_state.last_booted_img ==
+		(char)SYS_BOOT_IMG_A_ID)
+		printf("Image A\n");
+	else
+		printf("Image B\n");
+
+END:
+	close(fd_pers_reg);
+	return ret;
+}
+
