@@ -306,20 +306,20 @@ static unsigned int calculate_checksum(void)
  *****************************************************************************/
 static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 {
-	int ret = XST_FAILURE, fd_pers_reg;
+	int fd_pers_reg, ret = XST_FAILURE;
 	erase_info_t ei = {0U};
 	mtd_info_t qspi_mtd_info;
 
 	fd_pers_reg = open(qspi_mtd_pers_reg_file, O_WRONLY);
 	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
-		goto END;
+		return ret;
 	}
 
 	ret = ioctl(fd_pers_reg, MEMGETINFO, &qspi_mtd_info);
 	if (ret != XST_SUCCESS) {
 		printf("retrieving MTD paartition info failed\n");
-		goto END1;
+		goto END;
 	}
 
 	/* Update persistent registers in Qspi */
@@ -328,13 +328,13 @@ static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 	ret = ioctl(fd_pers_reg, MEMERASE, &ei);
 	if (ret < 0) {
 		printf("Erase Qspi MTD partition failed\n");
-		goto END1;
+		goto END;
 	}
 
 	ret = lseek(fd_pers_reg, 0, SEEK_SET);
 	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
-		goto END1;
+		goto END;
 	}
 
 	boot_img_info.checksum = calculate_checksum();
@@ -342,13 +342,12 @@ static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 	if (ret != sizeof(boot_img_info)) {
 		printf("Write Qspi MTD partition failed\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 	ret = XST_SUCCESS;
 
-END1:
-	close(fd_pers_reg);
 END:
+	close(fd_pers_reg);
 	return ret;
 }
 
@@ -366,19 +365,19 @@ END:
  *****************************************************************************/
 static int verify_current_running_image(char *qspi_mtd_file)
 {
-	int ret = XST_FAILURE, fd_pers_reg;
+	int fd_pers_reg, ret = XST_FAILURE;
 
 	fd_pers_reg = open(qspi_mtd_file, O_RDONLY);
 	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
-		goto END;
+		return ret;
 	}
 
 	ret = read(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
 	if (ret != sizeof(boot_img_info)) {
 		printf("Read Qspi MTD partition failed\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 
 	ret = validate_boot_img_info();
@@ -396,11 +395,8 @@ static int verify_current_running_image(char *qspi_mtd_file)
 			boot_img_info.persistent_state.img_b_bootable = 1U;
 	}
 
-	ret = XST_SUCCESS;
-
-END1:
-	close(fd_pers_reg);
 END:
+	close(fd_pers_reg);
 	return ret;
 }
 
@@ -417,7 +413,7 @@ END:
  *****************************************************************************/
 static int read_image_file(char *input_file)
 {
-	int ret = XST_FAILURE, fp;
+	int fp, ret = XST_FAILURE;
 	struct stat image_details;
 	const char  *iden_str = "XNLX";
 	char *iden_str_ptr = NULL;
@@ -426,13 +422,13 @@ static int read_image_file(char *input_file)
 	fp = open(input_file, O_RDONLY);
 	if (fp < 0) {
 		printf("Input image file open failed\n");
-		goto END;
+		return ret;
 	}
 
 	ret = fstat(fp, &image_details);
 	if (ret != XST_SUCCESS) {
 		printf("Input image file stat read failed\n");
-		goto END1;
+		goto END;
 	}
 
 	image_size = image_details.st_size;
@@ -440,13 +436,13 @@ static int read_image_file(char *input_file)
 	if (!srcaddr) {
 		printf("Allocation of memory for input image failed\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 	ret = read(fp, srcaddr, image_size);
 	if (ret != image_size) {
 		printf("Input image file read failed\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 
 	/* Validate Identification String of Image */
@@ -454,13 +450,12 @@ static int read_image_file(char *input_file)
 	if (strncmp(iden_str_ptr, iden_str, XBIU_IDEN_STR_LEN) != 0) {
 		printf("Identification String Validation of image Failed!!\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 	ret = XST_SUCCESS;
 
-END1:
-	close(fp);
 END:
+	close(fp);
 	return ret;
 }
 
@@ -479,7 +474,7 @@ END:
  *****************************************************************************/
 static int update_image(char *qspi_mtd_file)
 {
-	int ret = XST_FAILURE, fd;
+	int fd, ret = XST_FAILURE;
 	erase_info_t ei = {0U};
 	mtd_info_t qspi_mtd_info;
 	unsigned int input_image_checksum = 0xFFFFFFFFU;
@@ -491,13 +486,13 @@ static int update_image(char *qspi_mtd_file)
 	fd = open(qspi_mtd_file, O_RDWR);
 	if (fd < 0) {
 		printf("Open Qspi MTD partition failed\n");
-		goto END;
+		return ret;
 	}
 
 	ret = ioctl(fd, MEMGETINFO, &qspi_mtd_info);
 	if (ret != XST_SUCCESS) {
 		printf("retrieving MTD paartition info failed\n");
-		goto END1;
+		goto END;
 	}
 
 	/* Validate Image Size */
@@ -512,26 +507,26 @@ static int update_image(char *qspi_mtd_file)
 	ret = ioctl(fd, MEMERASE, &ei);
 	if (ret < 0) {
 		printf("Erase Qspi MTD partition failed\n");
-		goto END1;
+		goto END;
 	}
 
 	ret = lseek(fd, 0, SEEK_SET);
 	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
-		goto END1;
+		goto END;
 	}
 
 	ret = write(fd, (char *)srcaddr, image_size);
 	if (ret != image_size) {
 		printf("Write to Qspi MTD partition failed\n");
 		ret = XST_FAILURE;
-		goto END1;
+		goto END;
 	}
 
 	ret = lseek(fd, 0, SEEK_SET);
 	if (ret != 0) {
 		printf("Seek Qspi MTD partition failed\n");
-		goto END1;
+		goto END;
 	}
 
 	/* Calculate and Validate checksum */
@@ -546,7 +541,7 @@ static int update_image(char *qspi_mtd_file)
 		if (ret != len) {
 			printf("Qspi checksum calculation failed\n");
 			ret = XST_FAILURE;
-			goto END1;
+			goto END;
 		}
 		calculate_image_checksum(read_buffer, len,
 					 &qspi_image_checksum);
@@ -554,13 +549,12 @@ static int update_image(char *qspi_mtd_file)
 	}
 	if (input_image_checksum != qspi_image_checksum) {
 		printf("checksum mismatch!! Image update failed.\n");
-		goto END1;
+		goto END;
 	}
 	ret = XST_SUCCESS;
 
-END1:
-	close(fd);
 END:
+	close(fd);
 	return ret;
 }
 
@@ -582,7 +576,7 @@ static int validate_board_string(void)
 	cmd = popen("fru-print.py -b som -f revision", "r");
 	if (!cmd) {
 		printf("Unable to read Board revision from EEprom\n");
-		goto END;
+		return ret;
 	}
 	fscanf(cmd, "%9s", revision);
 	if ((strcmp(revision, "A") == 0) || (strcmp(revision, "B") == 0) ||
@@ -595,7 +589,6 @@ static int validate_board_string(void)
 	}
 	pclose(cmd);
 
-END:
 	return ret;
 }
 
