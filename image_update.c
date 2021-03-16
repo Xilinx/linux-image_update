@@ -25,6 +25,7 @@
 #define SYS_CHECKSUM_OFFSET		(0x3U)
 #define XBIU_IDEN_STR_OFFSET		(0x24U)
 #define XBIU_IDEN_STR_LEN		(0x4U)
+#define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
 
 /* The below enums denote persistent registers in Qspi Flash */
 struct sys_persistent_state {
@@ -61,6 +62,7 @@ static void calculate_image_checksum(char *srcaddr, unsigned int len,
 static int verify_current_running_image(char *qspi_mtd_file);
 static int validate_boot_img_info(void);
 static int print_persistent_state(char *qspi_mtd_file);
+static int print_qspi_mfg_info(void);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
@@ -180,7 +182,9 @@ int main(int argc, char *argv[])
 			printf("Reading persistent registers backup\n");
 			ret = print_persistent_state("/dev/mtd3");
 		}
-		ret = XST_SUCCESS;
+		if (ret == XST_SUCCESS) {
+			ret = print_qspi_mfg_info();
+		}
 		return ret;
 	}
 
@@ -702,6 +706,40 @@ static int print_persistent_state(char *qspi_mtd_file)
 		printf("Image A\n");
 	else
 		printf("Image B\n");
+
+END:
+	close(fd_pers_reg);
+	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function reads qspi mtd partition and prints Qspi MFG info.
+ *
+ * @return	XST_SUCCESS on SUCCESS and error code on failure
+ *
+ *****************************************************************************/
+static int print_qspi_mfg_info(void)
+{
+	int fd_pers_reg, ret = XST_FAILURE;
+	char qspi_mfg_info[XBIU_QSPI_MFG_INFO_SIZE + 1U] = {0};
+
+	fd_pers_reg = open("/dev/mtd14", O_RDONLY);
+	if (fd_pers_reg < 0) {
+		printf("Open Qspi MTD partition failed\n");
+		return ret;
+	}
+
+	ret = read(fd_pers_reg, qspi_mfg_info, XBIU_QSPI_MFG_INFO_SIZE);
+	if (ret != XBIU_QSPI_MFG_INFO_SIZE) {
+		printf("Read Qspi MTD partition failed\n");
+		ret = XST_FAILURE;
+		goto END;
+	}
+
+	printf("%s\n", qspi_mfg_info);
+	ret = XST_SUCCESS;
 
 END:
 	close(fd_pers_reg);
