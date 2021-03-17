@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 	if (argc != 2U) {
 		printf("Invalid parameters passed\n");
 		printf("Usage: image_update <path of image file>\n");
-		return ret;
+		return XST_FAILURE;
 	}
 	if ((strcmp(argv[1U], "-h") == 0U) ||
 	    (strcmp(argv[1U], "--help") == 0U)) {
@@ -172,8 +172,7 @@ int main(int argc, char *argv[])
 		printf("registers\n");
 		printf("image_update -h prints this menu.\n");
 		printf("image_update --help prints this menu.\n");
-		ret = XST_SUCCESS;
-		return ret;
+		return XST_SUCCESS;
 	}
 	if ((strcmp(argv[1U], "-p") == 0U) ||
 	    (strcmp(argv[1U], "--print") == 0U)) {
@@ -193,7 +192,7 @@ int main(int argc, char *argv[])
 	 */
 	ret = validate_board_string();
 	if (ret != XST_SUCCESS)
-		goto END;
+		return XST_FAILURE;
 
 	ret = verify_current_running_image("/dev/mtd2");
 	if (ret != XST_SUCCESS) {
@@ -201,18 +200,18 @@ int main(int argc, char *argv[])
 		ret = verify_current_running_image("/dev/mtd3");
 		if (ret != XST_SUCCESS) {
 			printf("Unable to retrieve persistent registers\n");
-			goto END;
+			return XST_FAILURE;
 		}
 	}
 
 	printf("Marking current image bootable\n");
 	ret = update_persistent_registers("/dev/mtd2");
 	if (ret < 0)
-		goto END;
+		return XST_FAILURE;
 
 	ret = update_persistent_registers("/dev/mtd3");
 	if (ret < 0)
-		goto END;
+		return XST_FAILURE;
 
 	printf("Reading Image..\n");
 	ret = read_image_file(argv[1U]);
