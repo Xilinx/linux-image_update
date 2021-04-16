@@ -584,7 +584,7 @@ static int validate_board_string(void)
 	fscanf(cmd, "%9s", revision);
 	if ((strcmp(revision, "A") == 0) || (strcmp(revision, "B") == 0) ||
 	    (strcmp(revision, "Y") == 0) || (strcmp(revision, "Z") == 0) ||
-		(strcmp(revision, "1.0") == 0)) {
+		(strcmp(revision, "1") == 0)) {
 		ret = XST_SUCCESS;
 	} else {
 		printf("Unable to read Board revision from EEprom via ");
