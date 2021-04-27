@@ -63,6 +63,7 @@ static int verify_current_running_image(char *qspi_mtd_file);
 static int validate_boot_img_info(void);
 static int print_persistent_state(char *qspi_mtd_file);
 static int print_qspi_mfg_info(void);
+static void print_usage(void);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
@@ -158,34 +159,70 @@ int main(int argc, char *argv[])
 {
 	int ret = XST_FAILURE;
 	char qspi_mtd_file[20U] = {0U};
+	char image_file_name[100U] = {0U};
+	int opt;
+	int update_flag = 0;
+	int help_flag = 0;
+	int print_flag = 0;
 
-	if (argc != 2U) {
-		printf("Invalid parameters passed\n");
-		printf("Usage: image_update <path of image file>\n");
-		return XST_FAILURE;
+	while((opt = getopt(argc, argv, "hpvi")) != -1) {
+		switch(opt)
+		{
+			case 'h':
+			{
+				help_flag = 1;
+			}
+				break;
+				
+			case 'p':
+			{
+				print_flag = 1;
+			}
+				break;
+			case 'i':
+			{
+				update_flag = 1;
+				if (strlen(argv[optind]) <
+					sizeof(image_file_name)) {
+					strcpy(image_file_name, argv[optind]);
+				}
+			}
+				break;
+			default:
+			{
+				print_usage();
+				return ret;
+			}
+		}
 	}
-	if ((strcmp(argv[1U], "-h") == 0U) ||
-	    (strcmp(argv[1U], "--help") == 0U)) {
-		printf("Usage: image_update <path of image file>\n");
-		printf("image_update -p prints persistent state registers.\n");
-		printf("image_update --print prints persistent state ");
-		printf("registers\n");
-		printf("image_update -h prints this menu.\n");
-		printf("image_update --help prints this menu.\n");
+
+	if (help_flag == 1) {
+		print_usage();
 		return XST_SUCCESS;
 	}
-	if ((strcmp(argv[1U], "-p") == 0U) ||
-	    (strcmp(argv[1U], "--print") == 0U)) {
+
+	if (print_flag == 1) {
 		ret = print_persistent_state("/dev/mtd2");
 		if (ret != XST_SUCCESS) {
-			printf("Reading persistent registers backup\n");
+			printf("Reading persistent registers ");
+			printf("backup\n");
 			ret = print_persistent_state("/dev/mtd3");
 		}
 		if (ret == XST_SUCCESS) {
 			ret = print_qspi_mfg_info();
 		}
-		return ret;
+		if (ret != XST_SUCCESS) {
+			return ret;
+		}
 	}
+
+	if (update_flag == 0) {
+		/* image_update has been called with -p option only
+		 * and the command has been processed.
+		 */
+		return XST_SUCCESS;
+	}
+
 
 	/* Validate board string to ensure the app does not run on
 	 * unsupported boards
@@ -213,8 +250,12 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		return XST_FAILURE;
 
+	if (update_flag == 0) {
+		return ret;
+	}
+
 	printf("Reading Image..\n");
-	ret = read_image_file(argv[1U]);
+	ret = read_image_file(image_file_name);
 	if (ret != XST_SUCCESS)
 		goto END;
 
@@ -263,7 +304,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto END;
 
-	printf("%s updated successfully\n", argv[1U]);
+	printf("%s updated successfully\n", image_file_name);
 
 END:
 	if (srcaddr)
@@ -743,5 +784,24 @@ static int print_qspi_mfg_info(void)
 END:
 	close(fd_pers_reg);
 	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function prints information regarding usage of image_update utility.
+ *
+ * @return	None
+ *
+ *****************************************************************************/
+static void print_usage(void)
+{
+	printf("Usage: image_update -i <path of image file>\n");
+	printf("image_update -i updates qspi image with the image file ");
+	printf("passed as argument.\n");
+	printf("image_update -p prints persistent state registers.\n");
+	printf("image_update -v marks the current running image as ");
+	printf("bootable.\n");
+	printf("image_update -h prints this menu.\n");
 }
 
