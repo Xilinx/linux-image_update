@@ -162,6 +162,7 @@ int main(int argc, char *argv[])
 	char image_file_name[100U] = {0U};
 	int opt;
 	int update_flag = 0;
+	int verify_flag = 0;
 	int help_flag = 0;
 	int print_flag = 0;
 
@@ -177,6 +178,11 @@ int main(int argc, char *argv[])
 			case 'p':
 			{
 				print_flag = 1;
+			}
+				break;
+			case 'v':
+			{
+				verify_flag = 1;
 			}
 				break;
 			case 'i':
@@ -216,7 +222,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (update_flag == 0) {
+	if ((verify_flag == 0) && (update_flag == 0)) {
 		/* image_update has been called with -p option only
 		 * and the command has been processed.
 		 */
@@ -430,7 +436,7 @@ static int verify_current_running_image(char *qspi_mtd_file)
 		goto END;
 	}
 
-	if (boot_img_info.persistent_state.requested_boot_img ==
+	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
 		if (boot_img_info.persistent_state.img_a_bootable == 0U)
 			boot_img_info.persistent_state.img_a_bootable = 1U;
