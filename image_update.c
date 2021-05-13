@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	printf("Marking current image bootable\n");
+	printf("Marking last booted image as bootable\n");
 	ret = update_persistent_registers("/dev/mtd2");
 	if (ret < 0)
 		return XST_FAILURE;
