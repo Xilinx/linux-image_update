@@ -196,6 +196,7 @@ int main(int argc, char *argv[])
 				break;
 			default:
 			{
+				printf("Invalid option!\n");
 				print_usage();
 				return ret;
 			}
@@ -205,6 +206,11 @@ int main(int argc, char *argv[])
 	if (help_flag == 1) {
 		print_usage();
 		return XST_SUCCESS;
+	}
+	if ((print_flag | verify_flag | update_flag) == 0) {
+		printf("Invalid command format!\n");
+		print_usage();
+		return ret;
 	}
 
 	if (print_flag == 1) {
@@ -802,12 +808,14 @@ END:
  *****************************************************************************/
 static void print_usage(void)
 {
-	printf("Usage: image_update -i <path of image file>\n");
+	printf("Usage: sudo image_update -i <path of image file>\n");
 	printf("image_update -i updates qspi image with the image file ");
 	printf("passed as argument.\n");
 	printf("image_update -p prints persistent state registers.\n");
 	printf("image_update -v marks the current running image as ");
 	printf("bootable.\n");
 	printf("image_update -h prints this menu.\n");
+	printf("Can use xmutil bootfw_update instead of image_update in ");
+	printf("any of the above commands.\n");
 }
 
