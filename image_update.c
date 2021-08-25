@@ -26,6 +26,8 @@
 #define XBIU_IDEN_STR_OFFSET		(0x24U)
 #define XBIU_IDEN_STR_LEN		(0x4U)
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
+#define XBIU_IMG_REVISON_OFFSET		(0x70U)
+#define XBIU_IMG_REVISON_SIZE		(0x24U)
 
 /* The below enums denote persistent registers in Qspi Flash */
 struct sys_persistent_state {
@@ -64,6 +66,7 @@ static int validate_boot_img_info(void);
 static int print_persistent_state(char *qspi_mtd_file);
 static int print_qspi_mfg_info(void);
 static void print_usage(void);
+static int print_image_rev_info(char *qspi_mtd_file, char *image_name);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
@@ -769,6 +772,52 @@ END:
  * @brief
  * This function reads qspi mtd partition and prints Qspi MFG info.
  *
+ * @param	qspi_mtd_file denotes the mtd partition to be read
+ * @param	image_name is the string denoting ImageA or ImageB
+ *
+ * @return	XST_SUCCESS on SUCCESS and error code on failure
+ *
+ *****************************************************************************/
+static int print_image_rev_info(char *qspi_mtd_file, char *image_name)
+{
+	int fd, ret = XST_FAILURE;
+	char image_rev_info[XBIU_IMG_REVISON_SIZE + 1U] = {0};
+
+	fd = open(qspi_mtd_file, O_RDONLY);
+	if (fd < 0) {
+		printf("Open Qspi MTD partition failed\n");
+		return ret;
+	}
+
+	ret = lseek(fd, XBIU_IMG_REVISON_OFFSET, SEEK_SET);
+	if (ret != XBIU_IMG_REVISON_OFFSET) {
+		printf("Seek Qspi MTD partition failed\n");
+		goto END;
+	}
+
+	ret = read(fd, image_rev_info, XBIU_IMG_REVISON_SIZE);
+	if (ret != XBIU_IMG_REVISON_SIZE) {
+		printf("Read Qspi MTD partition failed\n");
+		ret = XST_FAILURE;
+		goto END;
+	}
+
+	if (image_rev_info[0U] == 0) {
+		strncpy(image_rev_info, "Not defined", XBIU_IMG_REVISON_SIZE);
+	}
+	printf("%s Revision Info: %s\n", image_name, image_rev_info);
+	ret = XST_SUCCESS;
+
+END:
+	close(fd);
+	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function reads qspi mtd partition and prints Qspi MFG info.
+ *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
@@ -791,7 +840,11 @@ static int print_qspi_mfg_info(void)
 	}
 
 	printf("%s\n", qspi_mfg_info);
-	ret = XST_SUCCESS;
+
+	ret = print_image_rev_info("/dev/mtd5", "ImageA");
+	if (ret == XST_SUCCESS) {
+		ret = print_image_rev_info("/dev/mtd7", "ImageB");
+	}
 
 END:
 	close(fd_pers_reg);
