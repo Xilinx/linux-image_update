@@ -632,7 +632,7 @@ static int validate_board_string(void)
 	FILE *cmd;
 	char revision[10U] = {0U};
 
-	cmd = popen("fru-print.py -b som -f revision", "r");
+	cmd = popen("fru-print -b som -f revision", "r");
 	if (!cmd) {
 		printf("Unable to read Board revision from EEprom\n");
 		return ret;
@@ -644,7 +644,7 @@ static int validate_board_string(void)
 		ret = XST_SUCCESS;
 	} else {
 		printf("Unable to read Board revision from EEprom via ");
-		printf("fru-print.py utility\n");
+		printf("fru-print utility\n");
 	}
 	pclose(cmd);
 
