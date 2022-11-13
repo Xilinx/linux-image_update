@@ -629,15 +629,20 @@ END:
 static int validate_board_string(void)
 {
 	int ret = XST_FAILURE;
-	FILE *cmd;
+	FILE *fru;
 	char revision[10U] = {0U};
+	const char *cmd = "ipmi-fru \
+		    --fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
+		    --interpret-oem-data | \
+		    awk -F\": \" \
+		    '/^  *FRU Board Custom*/ { print ($2); exit }'";
 
-	cmd = popen("fru-print -b som -f revision", "r");
-	if (!cmd) {
+	fru = popen(cmd, "r");
+	if (!fru) {
 		printf("Unable to read Board revision from EEprom\n");
 		return ret;
 	}
-	ret = fscanf(cmd, "%9s", revision);
+	ret = fscanf(fru, "%9s", revision);
 	if (ret < 1) {
 		printf("Unable to read Board revision from EEprom\n");
 		return ret;
@@ -650,7 +655,7 @@ static int validate_board_string(void)
 		printf("Unable to read Board revision from EEprom via ");
 		printf("fru-print utility\n");
 	}
-	pclose(cmd);
+	pclose(fru);
 
 	return ret;
 }
