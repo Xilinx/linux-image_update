@@ -637,7 +637,11 @@ static int validate_board_string(void)
 		printf("Unable to read Board revision from EEprom\n");
 		return ret;
 	}
-	fscanf(cmd, "%9s", revision);
+	ret = fscanf(cmd, "%9s", revision);
+	if (ret < 1) {
+		printf("Unable to read Board revision from EEprom\n");
+		return ret;
+	}
 	if ((strcmp(revision, "A") == 0) || (strcmp(revision, "B") == 0) ||
 	    (strcmp(revision, "Y") == 0) || (strcmp(revision, "Z") == 0) ||
 		(strcmp(revision, "1") == 0)) {
