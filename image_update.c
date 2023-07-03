@@ -67,6 +67,7 @@ static int print_persistent_state(char *qspi_mtd_file);
 static int print_qspi_mfg_info(void);
 static void print_usage(void);
 static int print_image_rev_info(char *qspi_mtd_file, char *image_name);
+static int clear_multiboot_val(void);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
@@ -317,6 +318,11 @@ int main(int argc, char *argv[])
 	/* Update persistent register backup partition */
 	ret = update_persistent_registers("/dev/mtd3");
 	if (ret < 0)
+		goto END;
+
+	printf("Clearing multiboot register value\n");
+	ret = clear_multiboot_val();
+	if (ret != XST_SUCCESS)
 		goto END;
 
 	printf("%s updated successfully\n", image_file_name);
@@ -858,6 +864,26 @@ static int print_qspi_mfg_info(void)
 END:
 	close(fd_pers_reg);
 	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function clears multiboot register value.
+ *
+ * @return	XST_SUCCESS on success and XST_FAILURE on failure
+ *
+ *****************************************************************************/
+static int clear_multiboot_val(void)
+{
+	int ret = XST_FAILURE;
+
+	ret = system("echo 0xffca0010 0xfffffff 0x0 \
+	> /sys/firmware/zynqmp/config_reg");
+	if(ret)
+		return XST_FAILURE;
+
+	return XST_SUCCESS;
 }
 
 /*****************************************************************************/
