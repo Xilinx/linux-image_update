@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 	int ret = XST_FAILURE;
 	char qspi_mtd_file[20U] = {0U};
 	char image_file_name[100U] = {0U};
+	char image_name[8] = {0U};
 	int opt;
 	int update_flag = 0;
 	int verify_flag = 0;
@@ -270,7 +271,7 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	printf("Reading Image..\n");
+	printf("Reading Image file\n");
 	ret = read_image_file(image_file_name);
 	if (ret != XST_SUCCESS)
 		goto END;
@@ -280,14 +281,18 @@ int main(int argc, char *argv[])
 	 */
 	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
+		printf("Updating Image B\n");
+		strcpy(image_name, "Image B");
 		boot_img_info.persistent_state.img_b_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd7");
 	} else {
+		printf("Updating Image A\n");
+		strcpy(image_name, "Image A");
 		boot_img_info.persistent_state.img_a_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd5");
 	}
 
-	printf("Marking target image non bootable\n");
+	printf("Marking target image as non bootable\n");
 	ret = update_persistent_registers("/dev/mtd2");
 	if (ret < 0)
 		goto END;
@@ -296,7 +301,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto END;
 
-	printf("Writing Image..\n");
+	printf("Writing Image to %s partition\n",image_name);
 	ret = update_image(qspi_mtd_file);
 	if (ret != XST_SUCCESS)
 		goto END;
@@ -325,7 +330,7 @@ int main(int argc, char *argv[])
 	if (ret != XST_SUCCESS)
 		goto END;
 
-	printf("%s updated successfully\n", image_file_name);
+	printf("%s successfully updated to %s partition\n", image_file_name, image_name);
 
 END:
 	if (srcaddr)
