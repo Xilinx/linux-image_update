@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: MIT
-/*
- * Xilinx Zynq MPSoC Firmware layer
- *
- *  Copyright (C) 2021 Xilinx, Inc.
- *
- *  Vikram Sreenivasa Batchali <bvikram@xilinx.com>
- */
+/******************************************************************************
+* Copyright (c) 2021 - 2022 Xilinx, Inc.  All rights reserved.
+* Copyright (c) 2022 - 2024, Advanced Micro Devices, Inc. All Rights Reserved.
+* SPDX-License-Identifier: MIT
+*
+* Vikram Sreenivasa Batchali <bvikram@xilinx.com>
+* Sharath Kumar Dasari <sharathk@amd.com>
+******************************************************************************/
 
 #include <fcntl.h>
 #include <mtd/mtd-user.h>
@@ -22,12 +22,30 @@
 #define XST_FAILURE			(0x1)
 
 /* Macros */
-#define SYS_CHECKSUM_OFFSET		(0x3U)
+#define SYS_CHECKSUM_OFFSET			(0x3U)
 #define XBIU_IDEN_STR_OFFSET		(0x24U)
-#define XBIU_IDEN_STR_LEN		(0x4U)
+#define XBIU_IDEN_STR_LEN			(0x4U)
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
 #define XBIU_IMG_REVISON_OFFSET		(0x70U)
 #define XBIU_IMG_REVISON_SIZE		(0x24U)
+#define XBIU_NUM_BRDS				(0x6U)
+#define XBIU_NUM_BRD_REVS			(0x4U)
+#define XBIU_BRD_NAM_STR_LEN		(0x8U)
+#define XBIU_BRD_REV_STR_LEN		(0x4U)
+
+struct board_list {
+    char* brd_name; /* Name of the board */
+    char* brd_rev[XBIU_NUM_BRD_REVS]; /* Board Revision */
+};
+
+struct board_list brds[XBIU_NUM_BRDS] = {
+	{"VPK120", "B01", "B02", "", ""},
+	{"VPK180", "A01", "B01", "B02", ""},
+	{"VHK158", "A01", "B01", "B02", ""},
+	{"VEK280", "A01", "B01", "B02", "B03"},
+	{"SMK-K26", "A", "B", "1", "2"},
+	{"SMK-K24", "A", "B", "1", ""}
+};
 
 /* The below enums denote persistent registers in Qspi Flash */
 struct sys_persistent_state {
@@ -240,13 +258,15 @@ int main(int argc, char *argv[])
 		return XST_SUCCESS;
 	}
 
-
-	/* Validate board string to ensure the app does not run on
-	 * unsupported boards
-	 */
-	ret = validate_board_string();
-	if (ret != XST_SUCCESS)
-		return XST_FAILURE;
+	if(update_flag == 1){
+		printf("BootFw Image update started\n");
+		/* Validate board string to ensure the app does not run on
+		 * unsupported boards
+		 */
+		ret = validate_board_string();
+		if (ret != XST_SUCCESS)
+			return XST_FAILURE;
+	}
 
 	ret = verify_current_running_image("/dev/mtd2");
 	if (ret != XST_SUCCESS) {
@@ -641,34 +661,87 @@ static int validate_board_string(void)
 {
 	int ret = XST_FAILURE;
 	FILE *fru;
-	char revision[10U] = {0U};
-	const char *cmd = "ipmi-fru \
-		    --fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
-		    --interpret-oem-data | \
-		    awk -F\": \" \
-		    '/^  *FRU Board Custom*/ { print ($2); exit }'";
+	char brd_nm[XBIU_BRD_NAM_STR_LEN];
+	char brd_rv[XBIU_BRD_REV_STR_LEN];
+	char *cmd_nm;
+	char *cmd_rv;
+	struct stat st;
+	int i,j;
 
-	fru = popen(cmd, "r");
+	/*Check if the board is SOM or SC*/
+	if(stat("/sys/bus/i2c/devices/1-0050/eeprom",&st) == 0)
+	{
+		cmd_nm = "ipmi-fru \
+			--fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
+			--interpret-oem-data | \
+			awk -F\": \" \
+			'/^  *FRU Board Product Name*/ { print ($2); exit }'";
+		cmd_rv = "ipmi-fru \
+			--fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
+			--interpret-oem-data | \
+			awk -F\": \" \
+			'/^  *FRU Board Custom*/ { print ($2); exit }'";
+	}else{
+		cmd_nm = "ipmi-fru \
+			--fru-file=/sys/bus/i2c/devices/1-0054/eeprom \
+			--interpret-oem-data | \
+			awk -F\": \" \
+			'/^  *FRU Board Product Name*/ { print ($2); exit }'";
+		cmd_rv = "ipmi-fru \
+			--fru-file=/sys/bus/i2c/devices/1-0054/eeprom \
+			--interpret-oem-data | \
+			awk -F\": \" \
+			'/^  *FRU Board Custom*/ { print ($2); exit }'";
+	}
+
+	fru = popen(cmd_nm, "r");
 	if (!fru) {
-		printf("Unable to read Board revision from EEprom\n");
+		printf("Board name read faild from eeprom\n");
 		return ret;
 	}
-	ret = fscanf(fru, "%9s", revision);
+
+	ret = fscanf(fru, "%7s", brd_nm);
 	if (ret < 1) {
-		printf("Unable to read Board revision from EEprom\n");
+		printf("Board name fscanf read failed\n");
 		return ret;
 	}
-	if ((strcmp(revision, "A") == 0) || (strcmp(revision, "B") == 0) ||
-	    (strcmp(revision, "Y") == 0) || (strcmp(revision, "Z") == 0) ||
-		(strcmp(revision, "1") == 0) || (strcmp(revision, "2") == 0)) {
-		ret = XST_SUCCESS;
-	} else {
-		printf("Unable to read Board revision from EEprom via ");
-		printf("fru-print utility\n");
+
+	pclose(fru);
+
+	fru = popen(cmd_rv, "r");
+	if (!fru) {
+		printf("Board revision read faild from eeprom\n");
+		return ret;
+	}
+
+	ret = fscanf(fru, "%4s", brd_rv);
+	if (ret < 1) {
+		printf("Board revision fscanf read failed\n");
+		return ret;
 	}
 	pclose(fru);
 
+	for(i=0; i<XBIU_NUM_BRDS; i++){
+		if(strcmp(brd_nm, brds[i].brd_name) == 0){
+			for(j=0; j<XBIU_NUM_BRD_REVS; j++){
+				if(strcmp(brd_rv, brds[i].brd_rev[j]) == 0){
+					printf("Board detected: %s, Rev: %s\n",brd_nm, brd_rv);
+					ret = XST_SUCCESS;
+					goto END;
+				}
+			}
+			break;
+		}
+	}
+
+	if(XBIU_NUM_BRDS == i)
+		printf("Board not found: %s\n", brd_nm);
+	else
+		printf("Board found: %s but board revision not found: %s\n",brd_nm, brd_rv);
+
+END:
 	return ret;
+
 }
 
 /*****************************************************************************/
