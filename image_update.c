@@ -76,12 +76,17 @@ static unsigned int calculate_checksum(void);
 static int update_image(char *qspi_mtd_file);
 static int read_image_file(char *input_file);
 static int validate_board_string(void);
-static int update_persistent_registers(char *qspi_mtd_pers_reg_file);
+static int update_nv_registers(char *qspi_mtd_pers_reg_file);
+static int update_persistent_registers(void);
 static void calculate_image_checksum(char *srcaddr, unsigned int len,
 				     unsigned int *calc_crc);
-static int verify_current_running_image(char *qspi_mtd_file);
+static void verify_current_running_image(void);
 static int validate_boot_img_info(void);
-static int print_persistent_state(char *qspi_mtd_file);
+static int read_persistent_register(void);
+static void print_persistent_status(void);
+static char* check_image_update_status(void);
+static int read_mtd_part(char *qspi_mtd_file);
+static char* get_nxt_img_update(void);
 static int print_qspi_mfg_info(void);
 static void print_usage(void);
 static int print_image_rev_info(char *qspi_mtd_file, char *image_name);
@@ -226,10 +231,16 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	ret = read_persistent_register();
+	if (ret != XST_SUCCESS) {
+		return ret;
+	}
+
 	if (help_flag == 1) {
 		print_usage();
 		return XST_SUCCESS;
 	}
+
 	if ((print_flag | verify_flag | update_flag) == 0) {
 		printf("Invalid command format!\n");
 		print_usage();
@@ -237,15 +248,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (print_flag == 1) {
-		ret = print_persistent_state("/dev/mtd2");
-		if (ret != XST_SUCCESS) {
-			printf("Reading persistent registers ");
-			printf("backup\n");
-			ret = print_persistent_state("/dev/mtd3");
-		}
-		if (ret == XST_SUCCESS) {
-			ret = print_qspi_mfg_info();
-		}
+		ret = print_qspi_mfg_info();
 		if (ret != XST_SUCCESS) {
 			return ret;
 		}
@@ -259,7 +262,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(update_flag == 1){
-		printf("BootFw Image update started\n");
+		printf("BootFW image update started\n");
 		/* Validate board string to ensure the app does not run on
 		 * unsupported boards
 		 */
@@ -268,22 +271,10 @@ int main(int argc, char *argv[])
 			return XST_FAILURE;
 	}
 
-	ret = verify_current_running_image("/dev/mtd2");
-	if (ret != XST_SUCCESS) {
-		printf("Reading persistent registers backup\n");
-		ret = verify_current_running_image("/dev/mtd3");
-		if (ret != XST_SUCCESS) {
-			printf("Unable to retrieve persistent registers\n");
-			return XST_FAILURE;
-		}
-	}
+	(void)verify_current_running_image();
 
 	printf("Marking last booted image as bootable\n");
-	ret = update_persistent_registers("/dev/mtd2");
-	if (ret < 0)
-		return XST_FAILURE;
-
-	ret = update_persistent_registers("/dev/mtd3");
+	ret = update_persistent_registers();
 	if (ret < 0)
 		return XST_FAILURE;
 
@@ -291,7 +282,7 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	printf("Reading Image file\n");
+	printf("Reading BootFW image file\n");
 	ret = read_image_file(image_file_name);
 	if (ret != XST_SUCCESS)
 		goto END;
@@ -301,27 +292,23 @@ int main(int argc, char *argv[])
 	 */
 	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
-		printf("Updating Image B\n");
-		strcpy(image_name, "Image B");
+		printf("Updating BootFW image to ImageB bank\n");
+		strcpy(image_name, "ImageB");
 		boot_img_info.persistent_state.img_b_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd7");
 	} else {
-		printf("Updating Image A\n");
-		strcpy(image_name, "Image A");
+		printf("Updating BootFW image to ImageA bank\n");
+		strcpy(image_name, "ImageA");
 		boot_img_info.persistent_state.img_a_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd5");
 	}
 
 	printf("Marking target image as non bootable\n");
-	ret = update_persistent_registers("/dev/mtd2");
+	ret = update_persistent_registers();
 	if (ret < 0)
 		goto END;
 
-	ret = update_persistent_registers("/dev/mtd3");
-	if (ret < 0)
-		goto END;
-
-	printf("Writing Image to %s partition\n",image_name);
+	printf("Writing BootFW image to %s bank\n",image_name);
 	ret = update_image(qspi_mtd_file);
 	if (ret != XST_SUCCESS)
 		goto END;
@@ -335,13 +322,8 @@ int main(int argc, char *argv[])
 		boot_img_info.persistent_state.requested_boot_img =
 			(char)SYS_BOOT_IMG_A_ID;
 	}
-	/* Update persistent register partition */
-	ret = update_persistent_registers("/dev/mtd2");
-	if (ret < 0)
-		goto END;
-
-	/* Update persistent register backup partition */
-	ret = update_persistent_registers("/dev/mtd3");
+	/* Update persistent registers */
+	ret = update_persistent_registers();
 	if (ret < 0)
 		goto END;
 
@@ -350,7 +332,10 @@ int main(int argc, char *argv[])
 	if (ret != XST_SUCCESS)
 		goto END;
 
-	printf("%s successfully updated to %s partition\n", image_file_name, image_name);
+	printf("%s successfully updated to %s bank\n", image_file_name, image_name);
+	printf("Reboot the system to boot the updated BootFW image\n");
+	printf("Mark the BootFW image as bootable using -v option ");
+	printf("on successful boot\n");
 
 END:
 	if (srcaddr)
@@ -386,6 +371,35 @@ static unsigned int calculate_checksum(void)
 /*****************************************************************************/
 /**
  * @brief
+ * This function update both main and backup persistent register
+ * status
+ *
+ * @return	XST_SUCCESS on SUCCESS and XST_FAILURE on failure
+ *
+ *****************************************************************************/
+static int update_persistent_registers(void)
+{
+	int ret = XST_FAILURE;
+
+	/* Update persistent register partition */
+	ret = update_nv_registers("/dev/mtd2");
+	if (ret < 0)
+		return ret;
+
+	/* Update persistent register backup partition */
+	ret = update_nv_registers("/dev/mtd3");
+	if (ret < 0)
+		return ret;
+
+	ret = XST_SUCCESS;
+
+	return ret;
+
+}
+
+/*****************************************************************************/
+/**
+ * @brief
  * This function writes boot_img_info variable to persistent registers
  * indicated by qspi_mtd_file.
  *
@@ -394,7 +408,7 @@ static unsigned int calculate_checksum(void)
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
+static int update_nv_registers(char *qspi_mtd_pers_reg_file)
 {
 	int fd_pers_reg, ret = XST_FAILURE;
 	erase_info_t ei = {0U};
@@ -408,7 +422,7 @@ static int update_persistent_registers(char *qspi_mtd_pers_reg_file)
 
 	ret = ioctl(fd_pers_reg, MEMGETINFO, &qspi_mtd_info);
 	if (ret != XST_SUCCESS) {
-		printf("retrieving MTD paartition info failed\n");
+		printf("retrieving MTD partition info failed\n");
 		goto END;
 	}
 
@@ -453,29 +467,8 @@ END:
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-static int verify_current_running_image(char *qspi_mtd_file)
+static void verify_current_running_image(void)
 {
-	int fd_pers_reg, ret = XST_FAILURE;
-
-	fd_pers_reg = open(qspi_mtd_file, O_RDONLY);
-	if (fd_pers_reg < 0) {
-		printf("Open Qspi MTD partition failed\n");
-		return ret;
-	}
-
-	ret = read(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
-	if (ret != sizeof(boot_img_info)) {
-		printf("Read Qspi MTD partition failed\n");
-		ret = XST_FAILURE;
-		goto END;
-	}
-
-	ret = validate_boot_img_info();
-	if (ret != XST_SUCCESS) {
-		printf("Persistent registers are corrupted\n");
-		goto END;
-	}
-
 	if (boot_img_info.persistent_state.last_booted_img ==
 		(char)SYS_BOOT_IMG_A_ID) {
 		if (boot_img_info.persistent_state.img_a_bootable == 0U)
@@ -485,9 +478,6 @@ static int verify_current_running_image(char *qspi_mtd_file)
 			boot_img_info.persistent_state.img_b_bootable = 1U;
 	}
 
-END:
-	close(fd_pers_reg);
-	return ret;
 }
 
 /*****************************************************************************/
@@ -798,25 +788,51 @@ static int validate_boot_img_info(void)
 /*****************************************************************************/
 /**
  * @brief
- * This function reads the persistent registers and displays the state of
- * images A and B in a readable format.
+ * This function tries to reads persistent state from backup
+ * persistent partition, if it fails to read from main persistent
+ * partition
+ *
+ * @return	XST_SUCCESS on SUCCESS and XST_FAILURE on failure
+ *
+ *****************************************************************************/
+static int read_persistent_register(void)
+{
+	int ret = XST_FAILURE;
+
+	ret = read_mtd_part("/dev/mtd2");
+	if (ret != XST_SUCCESS) {
+		printf("Reading persistent registers backup\n");
+		ret = read_mtd_part("/dev/mtd3");
+		if (ret != XST_SUCCESS) {
+			printf("Unable to retrieve persistent registers\n");
+		}
+	}
+
+	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function loads persistent register status in to boot_img_info
+ * structure and validates it.
  *
  * @param	qspi_mtd_file denotes the mtd partition to be read
  *
  * @return	XST_SUCCESS on SUCCESS and error code on failure
  *
  *****************************************************************************/
-static int print_persistent_state(char *qspi_mtd_file)
+static int read_mtd_part(char *qspi_mtd_file)
 {
-	int fd_pers_reg, ret = XST_FAILURE;
+	int fd_mtd_part, ret = XST_FAILURE;
 
-	fd_pers_reg = open(qspi_mtd_file, O_RDONLY);
-	if (fd_pers_reg < 0) {
+	fd_mtd_part = open(qspi_mtd_file, O_RDONLY);
+	if (fd_mtd_part < 0) {
 		printf("Open Qspi MTD partition failed\n");
 		return ret;
 	}
 
-	ret = read(fd_pers_reg, (char *)&boot_img_info, sizeof(boot_img_info));
+	ret = read(fd_mtd_part, (char *)&boot_img_info, sizeof(boot_img_info));
 	if (ret != sizeof(boot_img_info)) {
 		printf("Read Qspi MTD partition failed\n");
 		ret = XST_FAILURE;
@@ -829,6 +845,43 @@ static int print_persistent_state(char *qspi_mtd_file)
 		goto END;
 	}
 
+END:
+	close(fd_mtd_part);
+	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function gets next image bank to be updated based on
+ * current persistent status
+ *
+ * @return	string ImageA or ImageB depending on persistent
+ *          register status
+ *
+ *****************************************************************************/
+static char* get_nxt_img_update(void)
+{
+	if (boot_img_info.persistent_state.last_booted_img ==
+		(char)SYS_BOOT_IMG_A_ID)
+		return "ImageB";
+	else
+		return "ImageA";
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function reads the persistent registers and displays the status of
+ * images A and B in a readable format.
+ *
+ * @param	qspi_mtd_file denotes the mtd partition to be read
+ *
+ * @return	XST_SUCCESS on SUCCESS and error code on failure
+ *
+ *****************************************************************************/
+static void print_persistent_status(void)
+{
 	printf("Image A: ");
 	if (boot_img_info.persistent_state.img_a_bootable == 0U)
 		printf("Non Bootable\n");
@@ -854,10 +907,6 @@ static int print_persistent_state(char *qspi_mtd_file)
 		printf("Image A\n");
 	else
 		printf("Image B\n");
-
-END:
-	close(fd_pers_reg);
-	return ret;
 }
 
 /*****************************************************************************/
@@ -919,6 +968,7 @@ static int print_qspi_mfg_info(void)
 	int fd_pers_reg, ret = XST_FAILURE;
 	char qspi_mfg_info[XBIU_QSPI_MFG_INFO_SIZE + 1U] = {0};
 
+	(void)print_persistent_status();
 	fd_pers_reg = open("/dev/mtd14", O_RDONLY);
 	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
@@ -967,6 +1017,33 @@ static int clear_multiboot_val(void)
 /*****************************************************************************/
 /**
  * @brief
+ * This function checks if image is updated in previous boot
+ *
+ * @return	string depending on persistent register status
+ *
+ *****************************************************************************/
+static char* check_image_update_status(void)
+{
+	/* Check if image update in previous boot */
+	if (boot_img_info.persistent_state.last_booted_img ==
+		(char)SYS_BOOT_IMG_A_ID) {
+		if(boot_img_info.persistent_state.img_a_bootable == 0U){
+			return "since ImageA\n            bank was updated in previous boot, use this option to mark it\n            as bootable.";
+		}else{
+			return "since no\n            image was updated in previous boot, no need to use this\n            option.";
+		}
+	} else {
+		if(boot_img_info.persistent_state.img_b_bootable == 0U){
+			return "since ImageB\n            bank was updated in previous boot, use this option to mark it\n            as bootable.";
+		}else{
+			return "since no\n            image was updated in previous boot, no need to use this\n            option.";
+		}
+	}
+}
+
+/*****************************************************************************/
+/**
+ * @brief
  * This function prints information regarding usage of image_update utility.
  *
  * @return	None
@@ -974,14 +1051,12 @@ static int clear_multiboot_val(void)
  *****************************************************************************/
 static void print_usage(void)
 {
-	printf("Usage: sudo image_update -i <path of image file>\n");
-	printf("image_update -i updates qspi image with the image file ");
-	printf("passed as argument.\n");
-	printf("image_update -p prints persistent state registers.\n");
-	printf("image_update -v marks the current running image as ");
-	printf("bootable.\n");
-	printf("image_update -h prints this menu.\n");
-	printf("Can use xmutil bootfw_update instead of image_update in ");
-	printf("any of the above commands.\n");
+	printf("\nUsage: [image_update/xmutil bootfw_update] [option]...\n\n");
+	printf("  -i      updates bootfw image with bootfw bin file passed as argument,\n");
+	printf("            with the current configuration, %s bank would be updated.\n", get_nxt_img_update());
+	printf("  -p      prints persistent status registers.\n");
+	printf("  -v      marks the current running bootfw image as bootable,");
+	printf(" %s\n",check_image_update_status());
+	printf("  -h      prints menu.\n\n");
 }
 
