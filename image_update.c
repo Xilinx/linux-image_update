@@ -28,7 +28,7 @@
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
 #define XBIU_IMG_REVISON_OFFSET		(0x70U)
 #define XBIU_IMG_REVISON_SIZE		(0x24U)
-#define XBIU_NUM_BRDS				(0x8U)
+#define XBIU_NUM_BRDS				(0x9U)
 #define XBIU_NUM_BRD_REVS			(0x4U)
 #define XBIU_BRD_NAM_STR_LEN		(0x8U)
 #define XBIU_BRD_REV_STR_LEN		(0x4U)
@@ -43,6 +43,7 @@ struct board_list brds[XBIU_NUM_BRDS] = {
 	{"VPK180", "A01", "B01", "B02", ""},
 	{"VHK158", "A01", "B01", "B02", ""},
 	{"VEK280", "A01", "B01", "B02", "B03"},
+	{"VM-P-M1", "A01", "B01", "B02", ""},
 	{"SMK-K26", "A", "B", "1", "2"},
 	{"SM-K26-", "A", "B", "1", "2"},
 	{"SMK-K24", "A", "B", "1", ""},
