@@ -28,26 +28,6 @@
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
 #define XBIU_IMG_REVISON_OFFSET		(0x70U)
 #define XBIU_IMG_REVISON_SIZE		(0x24U)
-#define XBIU_NUM_BRDS				(0x8U)
-#define XBIU_NUM_BRD_REVS			(0x4U)
-#define XBIU_BRD_NAM_STR_LEN		(0x8U)
-#define XBIU_BRD_REV_STR_LEN		(0x4U)
-
-struct board_list {
-    char* brd_name; /* Name of the board */
-    char* brd_rev[XBIU_NUM_BRD_REVS]; /* Board Revision */
-};
-
-struct board_list brds[XBIU_NUM_BRDS] = {
-	{"VPK120", "B01", "B02", "", ""},
-	{"VPK180", "A01", "B01", "B02", ""},
-	{"VHK158", "A01", "B01", "B02", ""},
-	{"VEK280", "A01", "B01", "B02", "B03"},
-	{"SMK-K26", "A", "B", "1", "2"},
-	{"SM-K26-", "A", "B", "1", "2"},
-	{"SMK-K24", "A", "B", "1", ""},
-	{"SM-K24-", "A", "B", "1", ""}
-};
 
 /* The below enums denote persistent registers in Qspi Flash */
 struct sys_persistent_state {
@@ -77,7 +57,6 @@ enum sys_boot_img_id {
 static unsigned int calculate_checksum(void);
 static int update_image(char *qspi_mtd_file);
 static int read_image_file(char *input_file);
-static int validate_board_string(void);
 static int update_nv_registers(char *qspi_mtd_pers_reg_file);
 static int update_persistent_registers(void);
 static void calculate_image_checksum(char *srcaddr, unsigned int len,
@@ -265,12 +244,6 @@ int main(int argc, char *argv[])
 
 	if(update_flag == 1){
 		printf("BootFW image update started\n");
-		/* Validate board string to ensure the app does not run on
-		 * unsupported boards
-		 */
-		ret = validate_board_string();
-		if (ret != XST_SUCCESS)
-			return XST_FAILURE;
 	}
 
 	(void)verify_current_running_image();
@@ -638,102 +611,6 @@ static int update_image(char *qspi_mtd_file)
 END:
 	close(fd);
 	return ret;
-}
-
-/*****************************************************************************/
-/**
- * @brief
- * This function reads the Board revision from eeprom and checks if
- * the application is running on one of the supported boards.
- *
- * @return	XST_SUCCESS if board revision is supported, else XST_FAILURE
- *
- *****************************************************************************/
-static int validate_board_string(void)
-{
-	int ret = XST_FAILURE;
-	FILE *fru;
-	char brd_nm[XBIU_BRD_NAM_STR_LEN];
-	char brd_rv[XBIU_BRD_REV_STR_LEN];
-	char *cmd_nm;
-	char *cmd_rv;
-	struct stat st;
-	int i,j;
-
-	/*Check if the board is SOM or SC*/
-	if(stat("/sys/bus/i2c/devices/1-0050/eeprom",&st) == 0)
-	{
-		cmd_nm = "ipmi-fru \
-			--fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
-			--interpret-oem-data | \
-			awk -F\": \" \
-			'/^  *FRU Board Product Name*/ { print ($2); exit }'";
-		cmd_rv = "ipmi-fru \
-			--fru-file=/sys/bus/i2c/devices/1-0050/eeprom \
-			--interpret-oem-data | \
-			awk -F\": \" \
-			'/^  *FRU Board Custom*/ { print ($2); exit }'";
-	}else{
-		cmd_nm = "ipmi-fru \
-			--fru-file=/sys/bus/i2c/devices/1-0054/eeprom \
-			--interpret-oem-data | \
-			awk -F\": \" \
-			'/^  *FRU Board Product Name*/ { print ($2); exit }'";
-		cmd_rv = "ipmi-fru \
-			--fru-file=/sys/bus/i2c/devices/1-0054/eeprom \
-			--interpret-oem-data | \
-			awk -F\": \" \
-			'/^  *FRU Board Custom*/ { print ($2); exit }'";
-	}
-
-	fru = popen(cmd_nm, "r");
-	if (!fru) {
-		printf("Board name read faild from eeprom\n");
-		return ret;
-	}
-
-	ret = fscanf(fru, "%7s", brd_nm);
-	if (ret < 1) {
-		printf("Board name fscanf read failed\n");
-		return ret;
-	}
-
-	pclose(fru);
-
-	fru = popen(cmd_rv, "r");
-	if (!fru) {
-		printf("Board revision read faild from eeprom\n");
-		return ret;
-	}
-
-	ret = fscanf(fru, "%4s", brd_rv);
-	if (ret < 1) {
-		printf("Board revision fscanf read failed\n");
-		return ret;
-	}
-	pclose(fru);
-
-	for(i=0; i<XBIU_NUM_BRDS; i++){
-		if(strcmp(brd_nm, brds[i].brd_name) == 0){
-			for(j=0; j<XBIU_NUM_BRD_REVS; j++){
-				if(strcmp(brd_rv, brds[i].brd_rev[j]) == 0){
-					printf("Board detected: %s, Rev: %s\n",brd_nm, brd_rv);
-					ret = XST_SUCCESS;
-					goto END;
-				}
-			}
-			break;
-		}
-	}
-
-	if(XBIU_NUM_BRDS == i)
-		printf("Board not found: %s\n", brd_nm);
-	else
-		printf("Board found: %s but board revision not found: %s\n",brd_nm, brd_rv);
-
-END:
-	return ret;
-
 }
 
 /*****************************************************************************/
