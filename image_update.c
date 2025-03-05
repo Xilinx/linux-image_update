@@ -1,6 +1,6 @@
 /******************************************************************************
 * Copyright (c) 2021 - 2022 Xilinx, Inc.  All rights reserved.
-* Copyright (c) 2022 - 2024, Advanced Micro Devices, Inc. All Rights Reserved.
+* Copyright (c) 2022 - 2025, Advanced Micro Devices, Inc. All Rights Reserved.
 * SPDX-License-Identifier: MIT
 *
 * Vikram Sreenivasa Batchali <bvikram@xilinx.com>
@@ -27,7 +27,11 @@
 #define XBIU_IDEN_STR_LEN			(0x4U)
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
 #define XBIU_IMG_REVISON_OFFSET		(0x70U)
+#define XBIU_IMG_VERSION_OFFSET		(0x9U)
 #define XBIU_IMG_REVISON_SIZE		(0x24U)
+#define XBIU_IMG_VERSION_SIZE		(0x4U)
+#define XBIU_IMG_VERSION_CHECK		(1.03F)
+
 
 /* The below enums denote persistent registers in Qspi Flash */
 struct sys_persistent_state {
@@ -72,10 +76,12 @@ static int print_qspi_mfg_info(void);
 static void print_usage(void);
 static int print_image_rev_info(char *qspi_mtd_file, char *image_name);
 static int clear_multiboot_val(void);
+static int extract_image_version(char *qspi_mtd_file);
 
 /* Variable definitions */
 static char *srcaddr = NULL;
 static unsigned int image_size;
+static float img_ver;
 static struct sys_boot_img_info boot_img_info __attribute__ ((aligned(4U)));
 
 static const unsigned int crc_table[] = {
@@ -167,6 +173,7 @@ int main(int argc, char *argv[])
 {
 	int ret = XST_FAILURE;
 	char qspi_mtd_file[20U] = {0U};
+	char last_boot_img[20U] = {0U};
 	char image_file_name[100U] = {0U};
 	char image_name[8] = {0U};
 	int opt;
@@ -271,11 +278,13 @@ int main(int argc, char *argv[])
 		strcpy(image_name, "ImageB");
 		boot_img_info.persistent_state.img_b_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd7");
+		strcpy(last_boot_img, "/dev/mtd5");
 	} else {
 		printf("Updating BootFW image to ImageA bank\n");
 		strcpy(image_name, "ImageA");
 		boot_img_info.persistent_state.img_a_bootable = 0U;
 		strcpy(qspi_mtd_file, "/dev/mtd5");
+		strcpy(last_boot_img, "/dev/mtd7");
 	}
 
 	printf("Marking target image as non bootable\n");
@@ -302,10 +311,16 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto END;
 
-	printf("Clearing multiboot register value\n");
-	ret = clear_multiboot_val();
+	ret = extract_image_version(last_boot_img);
 	if (ret != XST_SUCCESS)
 		goto END;
+
+	if(img_ver < XBIU_IMG_VERSION_CHECK){
+		printf("Clearing multiboot register value\n");
+		ret = clear_multiboot_val();
+		if (ret != XST_SUCCESS)
+			goto END;
+	}
 
 	printf("%s successfully updated to %s bank\n", image_file_name, image_name);
 	printf("Reboot the system to boot the updated BootFW image\n");
@@ -827,6 +842,53 @@ static int print_image_rev_info(char *qspi_mtd_file, char *image_name)
 		strncpy(image_rev_info, "Not defined", XBIU_IMG_REVISON_SIZE);
 	}
 	printf("%s Revision Info: %s\n", image_name, image_rev_info);
+	ret = XST_SUCCESS;
+
+END:
+	close(fd);
+	return ret;
+}
+
+/*****************************************************************************/
+/**
+ * @brief
+ * This function extracts the version information from
+ * the MTD partition of the provided image
+ *
+ * @param	qspi_mtd_file denotes the mtd partition to be read
+ *
+ * @return	XST_SUCCESS on SUCCESS and error code on failure
+ *
+ *****************************************************************************/
+static int extract_image_version(char *qspi_mtd_file)
+{
+	int fd, ret = XST_FAILURE;
+	char ver_str[XBIU_IMG_REVISON_SIZE + 1U] = {0};
+
+	fd = open(qspi_mtd_file, O_RDONLY);
+	if (fd < 0) {
+		printf("Open Qspi MTD partition failed\n");
+		return ret;
+	}
+
+	ret = lseek(fd, XBIU_IMG_REVISON_OFFSET + XBIU_IMG_VERSION_OFFSET, SEEK_SET);
+	if (ret != XBIU_IMG_REVISON_OFFSET + XBIU_IMG_VERSION_OFFSET) {
+		printf("Seek Qspi MTD partition failed\n");
+		goto END;
+	}
+
+	ret = read(fd, ver_str, XBIU_IMG_VERSION_SIZE);
+	if (ret != XBIU_IMG_VERSION_SIZE) {
+		printf("Read Qspi MTD partition failed\n");
+		ret = XST_FAILURE;
+		goto END;
+	}
+
+	if (ver_str[0U] == 0) {
+		strncpy(ver_str, "Not defined", XBIU_IMG_VERSION_SIZE);
+	}
+
+	img_ver = atof(ver_str);
 	ret = XST_SUCCESS;
 
 END:
