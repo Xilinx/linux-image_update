@@ -26,6 +26,12 @@
 #define XBIU_IDEN_STR_OFFSET		(0x24U)
 #define XBIU_IDEN_STR_LEN			(0x4U)
 #define XBIU_QSPI_MFG_INFO_SIZE		(0x100U)
+
+#define XBIU_MFG_INFO_MTD_PATH		"/dev/mtd15"
+#define XBIU_PERSISTENT_MTD_PATH	"/dev/mtd3"
+#define XBIU_PERSISTENT_BK_MTD_PATH	"/dev/mtd4"
+#define XBIU_IMAGE_A_MTD_PATH		"/dev/mtd6"
+#define XBIU_IMAGE_B_MTD_PATH		"/dev/mtd8"
 #define XBIU_IMG_REVISON_OFFSET		(0x70U)
 #define XBIU_IMG_VERSION_OFFSET		(0x9U)
 #define XBIU_IMG_REVISON_SIZE		(0x24U)
@@ -277,14 +283,14 @@ int main(int argc, char *argv[])
 		printf("Updating BootFW image to ImageB bank\n");
 		strcpy(image_name, "ImageB");
 		boot_img_info.persistent_state.img_b_bootable = 0U;
-		strcpy(qspi_mtd_file, "/dev/mtd7");
-		strcpy(last_boot_img, "/dev/mtd5");
+		strcpy(qspi_mtd_file, XBIU_IMAGE_B_MTD_PATH);
+		strcpy(last_boot_img, XBIU_IMAGE_A_MTD_PATH);
 	} else {
 		printf("Updating BootFW image to ImageA bank\n");
 		strcpy(image_name, "ImageA");
 		boot_img_info.persistent_state.img_a_bootable = 0U;
-		strcpy(qspi_mtd_file, "/dev/mtd5");
-		strcpy(last_boot_img, "/dev/mtd7");
+		strcpy(qspi_mtd_file, XBIU_IMAGE_A_MTD_PATH);
+		strcpy(last_boot_img, XBIU_IMAGE_B_MTD_PATH);
 	}
 
 	printf("Marking target image as non bootable\n");
@@ -372,12 +378,12 @@ static int update_persistent_registers(void)
 	int ret = XST_FAILURE;
 
 	/* Update persistent register partition */
-	ret = update_nv_registers("/dev/mtd2");
+	ret = update_nv_registers(XBIU_PERSISTENT_MTD_PATH);
 	if (ret < 0)
 		return ret;
 
 	/* Update persistent register backup partition */
-	ret = update_nv_registers("/dev/mtd3");
+	ret = update_nv_registers(XBIU_PERSISTENT_BK_MTD_PATH);
 	if (ret < 0)
 		return ret;
 
@@ -693,10 +699,10 @@ static int read_persistent_register(void)
 {
 	int ret = XST_FAILURE;
 
-	ret = read_mtd_part("/dev/mtd2");
+	ret = read_mtd_part(XBIU_PERSISTENT_MTD_PATH);
 	if (ret != XST_SUCCESS) {
 		printf("Reading persistent registers backup\n");
-		ret = read_mtd_part("/dev/mtd3");
+		ret = read_mtd_part(XBIU_PERSISTENT_BK_MTD_PATH);
 		if (ret != XST_SUCCESS) {
 			printf("Unable to retrieve persistent registers\n");
 		}
@@ -910,7 +916,7 @@ static int print_qspi_mfg_info(void)
 	char qspi_mfg_info[XBIU_QSPI_MFG_INFO_SIZE + 1U] = {0};
 
 	(void)print_persistent_status();
-	fd_pers_reg = open("/dev/mtd14", O_RDONLY);
+	fd_pers_reg = open(XBIU_MFG_INFO_MTD_PATH, O_RDONLY);
 	if (fd_pers_reg < 0) {
 		printf("Open Qspi MTD partition failed\n");
 		return ret;
@@ -925,9 +931,9 @@ static int print_qspi_mfg_info(void)
 
 	printf("%s\n", qspi_mfg_info);
 
-	ret = print_image_rev_info("/dev/mtd5", "ImageA");
+	ret = print_image_rev_info(XBIU_IMAGE_A_MTD_PATH, "ImageA");
 	if (ret == XST_SUCCESS) {
-		ret = print_image_rev_info("/dev/mtd7", "ImageB");
+		ret = print_image_rev_info(XBIU_IMAGE_B_MTD_PATH, "ImageB");
 	}
 
 END:
@@ -1000,4 +1006,3 @@ static void print_usage(void)
 	printf(" %s\n",check_image_update_status());
 	printf("  -h      prints menu.\n\n");
 }
-
