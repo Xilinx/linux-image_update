@@ -14,8 +14,7 @@ OBJS := $(patsubst %.c, %.o, $(c_SOURCES))
 
 all: $(EXEC)
 
-$(EXEC): $(c_SOURCES)
-	$(CC) $< -o $@
+$(EXEC): $(OBJS)
 
 install: $(EXEC)
 	$(INSTALL_PROGRAM) -D -m 755 $(EXEC) $(DESTDIR)$(bindir)/$(EXEC)
